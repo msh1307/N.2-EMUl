@@ -4,8 +4,8 @@ int error(char * s){
     putchar(0xa);
     exit(1);
 }
-int get_size(int fd){
-    int sz = lseek(fd, 0, SEEK_END);
+size_t get_size(int fd){
+    size_t sz = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
     return sz; 
 }

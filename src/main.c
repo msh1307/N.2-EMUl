@@ -1,7 +1,7 @@
 #include <unicorn/unicorn.h>
 #include "elf.h"
 #include "util.h"
-
+#include "main.h"
 int got_sigill = 0;
 
 void _interrupt(uc_engine *uc, uint32_t intno, void *user_data){
@@ -16,20 +16,21 @@ int main(int argc, char ** argv){
     if (argc < 2)
         error("binary not given.");
     void * bin = NULL; 
-    int err_load = load_elf(argv[1], &bin);
-    if (err_load < 0)
+    char * loader_path = get_interpreter(argv[1], &bin);
+    if (!loader_path)
         error("failed to load a binary.");
-    int size;
-    uint8_t *buf;
+    int fd = open(loader_path, O_RDONLY);
+    size_t size = get_size(fd);
+    printf("%ld",size);
     uc_engine *uc;
     uc_hook uh_trap;
-    // uc_err err = uc_open (UC_ARCH_X86, UC_MODE_64, &uc);
-    // if (err) {
-    //     fprintf (stderr, "Cannot initialize unicorn\n");
-    //     return 1;
-    // }
+    uc_err err = uc_open (UC_ARCH_X86, UC_MODE_64, &uc);
+    if (err) 
+        error("Cannot initialize unicorn\n");
+    
     // size = UC_BUG_WRITE_SIZE;
     // buf = malloc (size);
+    // uc_mem_map(uc,LD_ADDRESS , size, UC_PROT_ALL);
     // if (!buf) {
     //     fprintf (stderr, "Cannot allocate\n");
     //     return 1;
@@ -45,3 +46,10 @@ int main(int argc, char ** argv){
     // printf ("Correct: %s\n", got_sigill? "YES": "NO");
     // return got_sigill? 0: 1;
 }
+
+
+// 0x00007ffff7fc3000 <- ld address
+
+
+
+// 0x7ffff7fbb000 <- first map ANON

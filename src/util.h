@@ -6,4 +6,4 @@
 #include <unistd.h>
 int error(char * s);
 char * parse_string_offset(int fd, uint64_t off);
-int get_size(int fd);
+size_t get_size(int fd);

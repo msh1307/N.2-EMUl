@@ -1,8 +1,9 @@
 #include "elf.h"
-int load_elf(char * filename, void * bin){
-    int cnt;
+char * get_interpreter(char * filename, void * bin){
+    size_t cnt;
     int mode;
     int elfclass = 0;
+    char * loader_path = NULL;
     Elf_Scn *scn = NULL;
     Elf64_Phdr *phdr = NULL;
     int fd = open(filename, O_RDONLY);
@@ -16,27 +17,29 @@ int load_elf(char * filename, void * bin){
         error("gelf_getclass() failed.");
     if (elfclass == ELFCLASS32){
         puts("ELF file is 32-bit.");
-        mode = MODE_32;
+        mode = 0;
     }
     else if (elfclass == ELFCLASS64){
-        puts("ELF file is 64-bit.");
-        mode = MODE_64;
+        mode = 1;
     }
     else 
         error("Unknown ELF class.");
     if (elf_getphdrnum(elf,&cnt) != 0)
         error("elf_getphdrnum() failed.");
-    if (mode == MODE_64){
+    if (mode == 1){
+        GElf_Phdr Phdr;
         for (int i = 0; i < cnt; i++){
-            if((phdr = elf64_getphdr(elf)) == NULL)
+            if((phdr = gelf_getphdr(elf,i,&Phdr)) == NULL)
                 error("elf64_getphdr() failed.");
             if (phdr->p_type == PT_INTERP){
-                char * loader_path = parse_string_offset(fd, phdr->p_vaddr);
+                loader_path = parse_string_offset(fd, phdr->p_vaddr);
                 if (loader_path == NULL)
                     error("parse_string_offset() failed.");
-                puts(loader_path);
             }
         }
     }
+    if (!loader_path)
+        return NULL;
+    return loader_path;
 
 }
