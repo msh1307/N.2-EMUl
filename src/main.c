@@ -24,7 +24,7 @@ int main(int argc, char ** argv){
     uc_engine *uc;
     uc_hook uh_trap;
     uc_err err_uc = uc_open (UC_ARCH_X86, UC_MODE_64, &uc);
-    if (err_uc) 
+    if (err_uc != UC_ERR_OK) 
         error("Cannot initialize unicorn");
     
     int err = emul_load(uc, interpreter_fd, LD_BASE);

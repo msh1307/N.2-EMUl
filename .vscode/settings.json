@@ -10,6 +10,12 @@
         "string": "c",
         "emul.h": "c",
         "elf.h": "c",
-        "libelf.h": "c"
+        "libelf.h": "c",
+        "chrono": "c",
+        "compare": "c",
+        "functional": "c",
+        "ratio": "c",
+        "tuple": "c",
+        "type_traits": "c"
     }
 }
