@@ -4,6 +4,12 @@
         "string_view": "c",
         "initializer_list": "c",
         "ranges": "c",
-        "utility": "c"
+        "utility": "c",
+        "stdarg.h": "c",
+        "util.h": "c",
+        "string": "c",
+        "emul.h": "c",
+        "elf.h": "c",
+        "libelf.h": "c"
     }
 }

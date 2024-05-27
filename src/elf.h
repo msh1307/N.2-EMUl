@@ -4,3 +4,4 @@
 
 char * get_interpreter(char * filename, void * bin);
 
+void parse_elf(uint8_t *data, Elf64_Phdr **phdrs, Elf64_Shdr ** shdrs, Elf64_Shdr ** shstrs, uint16_t * phnum, uint16_t * shnum);
