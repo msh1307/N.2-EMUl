@@ -1,11 +1,10 @@
 #include "elf.h"
-char * get_interpreter(char * filename, void * bin){
+char * get_interpreter(int fd, void * bin){
     size_t cnt;
     int elfclass = 0;
     char * loader_path = NULL;
     Elf_Scn *scn = NULL;
     Elf64_Phdr *phdr = NULL;
-    int fd = open(filename, O_RDONLY);
     if (elf_version(EV_CURRENT) == EV_NONE) 
         error("get_interpreter() -> elf_version() failed");
     size_t size = get_size(fd);

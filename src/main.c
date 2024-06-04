@@ -8,12 +8,12 @@ void _interrupt(uc_engine *uc, uint32_t intno, void *user_data){
     }
 }
 
-
 int main(int argc, char ** argv){
     if (argc < 2)
         error("binary not given");
     void * bin = NULL; 
-    char * loader_path = get_interpreter(argv[1], &bin);
+    int fd = open(argv[1], O_RDONLY);
+    char * loader_path = get_interpreter(fd, &bin);
     if (!loader_path)
         error("failed to extract the interpreter path");
     success("Loader path: %s", loader_path);
@@ -31,6 +31,9 @@ int main(int argc, char ** argv){
     if (err < 0)
         error("Failed to load interpreter");
     close(interpreter_fd);
+    
+
+
     // size = UC_BUG_WRITE_SIZE;
     // buf = malloc (size);
     // uc_mem_map(uc,LD_BASE , size, UC_PROT_ALL);

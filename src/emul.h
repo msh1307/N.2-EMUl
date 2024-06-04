@@ -1,4 +1,5 @@
 #include <unicorn/unicorn.h>
+#include <sys/mman.h>
 #include <stdint.h>
 #include "elf.h"
 

@@ -6,9 +6,9 @@ int emul_load(uc_engine * uc, int fd, uint64_t address){
     Elf64_Phdr * phdrs = NULL;
     Elf64_Shdr * shdrs;
     Elf64_Shdr * shstrs = NULL;
-    uint8_t * data = malloc(size);
-    if (read(fd, data, size) != size)
-        error("emul_load() -> read() failed");
+    uint8_t * data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if ((uint64_t)data == -1)
+        error("emul_load() -> mmap() failed");
     parse_elf(data, &phdrs, &shdrs, &shstrs, &phnum, &shnum);
     if (!phdrs)
         error("emul_load() -> phdrs == 0");
@@ -18,10 +18,11 @@ int emul_load(uc_engine * uc, int fd, uint64_t address){
     if (err != UC_ERR_OK)
         error("emul_load() -> emul_map_memory()");
     err = emul_load_file(uc, address, data, phdrs, phnum);
-    // if (err != UC_ERR_OK)
-    //     error("emul_load() -> emul_load_file()");
-    return 0;
+    if (err != UC_ERR_OK)
+        error("emul_load() -> emul_load_file()");
+   return 0;
 }
+
 uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs, uint16_t phnum){
     uint64_t vaddr, align, memsz, offset,flags,filesz, sz, addr;
     for (int i=0; i<phnum; i++){
@@ -32,8 +33,8 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
             memsz = phdrs[i].p_memsz;
             filesz = phdrs[i].p_filesz;
             flags = phdrs[i].p_flags;
-            sz = (((memsz-1) / align) + 1) * align;
             addr = (base_address+vaddr)&0xfffffffffffff000;
+            sz = (((base_address+vaddr+memsz - addr-1) / align) + 1) * align;
             success("Mapping Memory [%lx ~ %lx (%lx)] FileOffset=%lx FLAGS=%lx", addr,addr+sz,sz,offset,flags);
             uint32_t uc_flags = 0;
             if (flags & PF_R)
@@ -68,3 +69,4 @@ uc_err emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf
     }
     return UC_ERR_OK;
 }
+
