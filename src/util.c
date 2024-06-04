@@ -1,7 +1,8 @@
 #include "util.h"
-int error(char * s){
+void error(char * s, int terminate){
     fprintf(stderr, "[-] %s\n", s);
-    exit(1);
+    if (terminate)
+        exit(1);
 }
 
 int success(const char *format, ...) {
@@ -30,8 +31,10 @@ char * parse_string_offset (int fd, uint64_t off){
     char * buf = malloc(0x50);
     lseek(fd, off, SEEK_SET);
     for (int i=0; i< 0x50; i++){
-        if (read(fd, &c, 1) != 1)
-            error("parse_string_offset() -> read() failed");
+        if (read(fd, &c, 1) != 1){
+            error("parse_string_offset() -> read() failed", 0);
+            return NULL;
+        }
         if (c != 0x0){
             buf[i] = c;
         }

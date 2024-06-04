@@ -5,30 +5,42 @@ char * get_interpreter(int fd, void * bin){
     char * loader_path = NULL;
     Elf_Scn *scn = NULL;
     Elf64_Phdr *phdr = NULL;
-    if (elf_version(EV_CURRENT) == EV_NONE) 
-        error("get_interpreter() -> elf_version() failed");
+    if (elf_version(EV_CURRENT) == EV_NONE){
+        error("get_interpreter() -> elf_version() failed", 0);
+        return NULL;
+    }
     size_t size = get_size(fd);
     Elf * elf = elf_begin(fd, ELF_C_READ, NULL);
-    if (elf == NULL)
-        error("get_interpreter() -> elf_begin() failed");
-    if ((elfclass = gelf_getclass(elf)) == ELFCLASSNONE) 
-        error("get_interpreter() -> gelf_getclass() failed");
+    if (elf == NULL){
+        error("get_interpreter() -> elf_begin() failed", 0);
+        return NULL;
+    }
+    if ((elfclass = gelf_getclass(elf)) == ELFCLASSNONE){
+        error("get_interpreter() -> gelf_getclass() failed", 0);
+        return NULL;
+    }
     if (elfclass == ELFCLASS64){
-        if (elf_getphdrnum(elf,&cnt) != 0)
-            error("get_interpreter() -> elf_getphdrnum() failed");
+        if (elf_getphdrnum(elf,&cnt) != 0){
+            error("get_interpreter() -> elf_getphdrnum() failed", 0);
+            return NULL;
+        }
         GElf_Phdr Phdr;
         for (int i = 0; i < cnt; i++){
-            if((phdr = gelf_getphdr(elf,i,&Phdr)) == NULL)
-                error("get_interpreter() -> elf64_getphdr() failed");
+            if((phdr = gelf_getphdr(elf,i,&Phdr)) == NULL){
+                error("get_interpreter() -> elf64_getphdr() failed", 0);
+                return NULL;
+            }
             if (phdr->p_type == PT_INTERP){
                 loader_path = parse_string_offset(fd, phdr->p_vaddr);
-                if (loader_path == NULL)
-                    error("get_interpreter() -> parse_string_offset() failed");
+                if (loader_path == NULL){
+                    error("get_interpreter() -> parse_string_offset() failed", 0);
+                    return NULL;
+                }
             }
         }
     }
     else
-        error("unsupported ELF class");
+        error("unsupported ELF class", 1);
     if (!loader_path)
         return NULL;
     return loader_path;
@@ -49,7 +61,7 @@ void parse_elf(uint8_t *data, Elf64_Phdr **phdrs, Elf64_Shdr ** shdrs, Elf64_Shd
         *shstrs= shstr;
     }
     else 
-        error("unsupported elf class");
+        error("unsupported elf class", 1);
     *phnum = ehdr->e_phnum;
     *shnum = ehdr->e_shnum;
 }

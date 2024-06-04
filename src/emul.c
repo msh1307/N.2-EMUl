@@ -7,20 +7,32 @@ int emul_load(uc_engine * uc, int fd, uint64_t address){
     Elf64_Shdr * shdrs;
     Elf64_Shdr * shstrs = NULL;
     uint8_t * data = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    if ((uint64_t)data == -1)
-        error("emul_load() -> mmap() failed");
+    if ((uint64_t)data == -1){
+        error("emul_load() -> mmap() failed",0);
+        return -1;
+    }
     parse_elf(data, &phdrs, &shdrs, &shstrs, &phnum, &shnum);
-    if (!phdrs)
-        error("emul_load() -> phdrs == 0");
-    if (!shdrs)
-        error("emul_load() -> shdrs == 0");
+    if (!phdrs){
+        error("emul_load() -> phdrs == 0", 0);
+        return -1;
+    }
+    if (!shdrs){
+        error("emul_load() -> shdrs == 0", 0);
+        return -1; 
+    }
     uc_err err = emul_map_memory(uc, address, phdrs, phnum);
-    if (err != UC_ERR_OK)
-        error("emul_load() -> emul_map_memory()");
+    if (err != UC_ERR_OK){
+        error("emul_load() -> emul_map_memory()", 0);
+        return -1;
+    }
     err = emul_load_file(uc, address, data, phdrs, phnum);
-    if (err != UC_ERR_OK)
-        error("emul_load() -> emul_load_file()");
-   return 0;
+    if (err != UC_ERR_OK){
+        error("emul_load() -> emul_load_file()", 0);
+        return -1;
+    }
+    if (munmap(data, size) == -1)
+        return -1;
+    return 0;
 }
 
 uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs, uint16_t phnum){

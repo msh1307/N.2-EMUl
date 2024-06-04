@@ -19,6 +19,7 @@
         "type_traits": "c",
         "stdint.h": "c",
         "mman.h": "c",
-        "unicorn.h": "c"
+        "unicorn.h": "c",
+        "stdlib.h": "c"
     }
 }

@@ -10,28 +10,28 @@ void _interrupt(uc_engine *uc, uint32_t intno, void *user_data){
 
 int main(int argc, char ** argv){
     if (argc < 2)
-        error("binary not given");
+        error("binary not given", 1);
     void * bin = NULL; 
     int fd = open(argv[1], O_RDONLY);
     char * loader_path = get_interpreter(fd, &bin);
     if (!loader_path)
-        error("failed to extract the interpreter path");
+        error("failed to extract the interpreter path", 1);
     success("Loader path: %s", loader_path);
     int interpreter_fd = open(loader_path, O_RDONLY);
     free(loader_path);
     if (interpreter_fd < 0)
-        error("loader not found");
+        error("loader not found", 1);
     uc_engine *uc;
     uc_hook uh_trap;
     uc_err err_uc = uc_open (UC_ARCH_X86, UC_MODE_64, &uc);
     if (err_uc != UC_ERR_OK) 
-        error("Cannot initialize unicorn");
+        error("Cannot initialize unicorn", 1);
     
     int err = emul_load(uc, interpreter_fd, LD_BASE);
     if (err < 0)
-        error("Failed to load interpreter");
+        error("Failed to load interpreter", 1);
     close(interpreter_fd);
-    
+
 
 
     // size = UC_BUG_WRITE_SIZE;
