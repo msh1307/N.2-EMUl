@@ -20,6 +20,9 @@
         "stdint.h": "c",
         "mman.h": "c",
         "unicorn.h": "c",
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "*.tcc": "c",
+        "fstream": "c",
+        "random": "c"
     }
 }

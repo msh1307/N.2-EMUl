@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <stdarg.h>
-void error(char * s, int terminate);
+
+void failure(char * s);
 char * parse_string_offset(int fd, uint64_t off);
 size_t get_size(int fd);
 int success(const char *format, ...);
