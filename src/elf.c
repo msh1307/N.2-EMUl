@@ -47,20 +47,24 @@ char * get_interpreter(int fd, void * bin){
 
 }
 
-void parse_elf(uint8_t *data, Elf64_Phdr **phdrs, Elf64_Shdr ** shdrs, Elf64_Shdr ** shstrs, uint16_t * phnum, uint16_t * shnum) {
+void parse_elf(uint8_t *data, Elf64_Phdr **phdrs, Elf64_Shdr ** shdrs, Elf64_Shdr ** shstrs, uint16_t * phnum, uint16_t * shnum, uint64_t * entry) {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)data;
     Elf64_Off ph_offset = ehdr->e_phoff;
     if (ehdr->e_ident[EI_CLASS] == ELFCLASS64) {
-        success("Entry point address: 0x%lx", ehdr->e_entry);
+        *entry = ehdr->e_entry;
         Elf64_Phdr *phdr = (Elf64_Phdr *)(data + ph_offset);
         Elf64_Shdr *shdr = (Elf64_Shdr *)(data + ehdr->e_shoff);
         Elf64_Shdr *shstr = (Elf64_Shdr *)(data + ehdr->e_shoff + ehdr->e_shentsize * ehdr->e_shstrndx);
         *shdrs = shdr;
         *phdrs = phdr;
-        *shstrs= shstr;
+        *shstrs = shstr;
     }
-    else 
+    else{
         failure("unsupported elf class");
+        *phnum = 0;
+        *shnum = 0;
+        return ;
+    }
     *phnum = ehdr->e_phnum;
     *shnum = ehdr->e_shnum;
 }

@@ -23,6 +23,14 @@
         "stdlib.h": "c",
         "*.tcc": "c",
         "fstream": "c",
-        "random": "c"
+        "random": "c",
+        "gelf.h": "c",
+        "unistd.h": "c",
+        "libs.h": "c",
+        "fcntl.h": "c",
+        "string.h": "c",
+        "stdio.h": "c",
+        "main.h": "c",
+        "stddef.h": "c"
     }
 }
