@@ -1,12 +1,12 @@
 #include "../include/syscalls.h"
-void handle_syscall(uc_engine * uc, uint64_t rax, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t r9){
+void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
     switch (rax){
         case 0x01:
-            emu_sys_write(uc, rdi, rsi, rdx);
+            emu_sys_write(uc);
             break;
         
         case 0x0c:
-            emu_sys_brk(uc, rdi);
+            emu_sys_brk(uc, ctx);
             break;
             
         case 0x3c:
@@ -15,13 +15,20 @@ void handle_syscall(uc_engine * uc, uint64_t rax, uint64_t rdi, uint64_t rsi, ui
             break;
 
         default:
+            uint64_t rdi = uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+            uint64_t rsi = uc_reg_read(uc, UC_X86_REG_RDI, &rsi);
+            uint64_t rdx = uc_reg_read(uc, UC_X86_REG_RDI, &rdx);
             success("emul: syscall(rax=0x%lx, rdi=0x%lx, rsi=0x%lx, rdx=0x%lx)", rax, rdi, rsi, rdx);
             break;
     }
 }
 
 
-void emu_sys_write(uc_engine * uc, uint64_t rdi, uint64_t rsi, uint64_t rdx){
+void emu_sys_write(uc_engine * uc){
+    uint64_t rdi, rsi, rdx;
+    uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+    uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+    uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
     char * buf = malloc(rdx+1);
     if (buf){
         uc_mem_read(uc, rsi, buf, rdx);
@@ -34,8 +41,9 @@ void emu_sys_write(uc_engine * uc, uint64_t rdi, uint64_t rsi, uint64_t rdx){
         uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffff});
     }
 }
-
-
-void emu_sys_brk(uc_engine * uc, uint64_t rdi){ // brk implementation with a fixed program break
-    
+void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation with a fixed program break 
+    uint64_t rdi;
+    uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+    success("program break: 0x%lx", ctx -> program_break);
 }
+

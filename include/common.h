@@ -1,5 +1,5 @@
-#ifndef LIBS_H
-#define LIBS_H
+#ifndef _COMMON_H
+#define _COMMON_H
 #include <libelf.h>
 #include <gelf.h>
 #include <elf.h>

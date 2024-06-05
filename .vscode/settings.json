@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "elf.h": "c",
+        "syscalls.h": "c",
+        "util.h": "c",
+        "emul.h": "c",
+        "libs.h": "c",
+        "stdlib.h": "c",
+        "main.h": "c",
+        "common.h": "c"
+    }
+}

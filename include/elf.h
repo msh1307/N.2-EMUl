@@ -1,7 +1,6 @@
-#ifndef ELF_H
-#define ELF_H
-
-#include "libs.h"
+#ifndef _ELF1_H
+#define _ELF1_H
+#include "common.h"
 #include "util.h"
 
 char * get_interpreter(int fd, void * bin);

@@ -1,11 +1,9 @@
-#ifndef EMUL_H
-#define EMUL_H
-#include "syscalls.h"
-#include "libs.h"
+#ifndef _EMUL_H
+#define _EMUL_H
+#include "common.h"
 #include "util.h"
 #include "elf.h"
 #include "main.h"
-
 struct bin_meta {
     uint64_t entry;  
     uint64_t phdr;
@@ -26,8 +24,9 @@ struct emul_ctx {
     char ** envp;
     char * platform;
     struct initial init;
+    uint64_t program_break; 
 };
-
+#include "syscalls.h"
 int emul_load(uc_engine * uc, int fd, uint64_t address, struct bin_meta * ctx);
 uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs, uint16_t phnum);
 uc_err emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf64_Phdr * phdrs, uint16_t phnum);
@@ -37,7 +36,5 @@ int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx)
 int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx);
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx);
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx);
-void emul_syscall_hook(uc_engine * uc, void * user_data);
-void handle_syscall(uc_engine * uc, uint64_t rax, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t r9);
-void sys_write(uc_engine * uc, uint64_t rdi, uint64_t rsi, uint64_t rdx);
+void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx);
 #endif

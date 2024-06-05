@@ -1,6 +1,6 @@
-#ifndef MAIN_H
-#define MAIN_H
-#include "libs.h"
+#ifndef _MAIN_H
+#define _MAIN_H
+#include "common.h"
 #include "elf.h"
 #include "util.h"
 #include "emul.h"

@@ -7,6 +7,7 @@ int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx)
 
 int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx){
     ctx -> init.user_bin.base = address;
+    ctx -> program_break = -1;
     return emul_load(uc, fd, address, &ctx -> init.user_bin);
 }
 
@@ -293,16 +294,10 @@ bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t
     }
 }
 
-void emul_syscall_hook(uc_engine * uc, void * user_data){
+void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rax, rdi, rsi, rdx, r10, r8, r9;
     uc_reg_read(uc, UC_X86_REG_RAX, &rax);
-    uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-    uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
-    uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-    uc_reg_read(uc, UC_X86_REG_R10, &r10);
-    uc_reg_read(uc, UC_X86_REG_R8, &r8);
-    uc_reg_read(uc, UC_X86_REG_R9, &r9);
-    handle_syscall(uc, rax, rdi, rsi, rdx, r10, r8, r9);
+    handle_syscall(uc, rax, ctx);
 }
 
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
@@ -310,7 +305,7 @@ uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
     uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp);
     // uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
     uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0);
-    uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, NULL, 1, 0, UC_X86_INS_SYSCALL);
+    uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL);
     uc_err err = uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0); 
     
     return err;

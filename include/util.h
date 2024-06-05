@@ -1,6 +1,6 @@
-#ifndef UTIL_H
-#define UTIL_H
-#include "libs.h"
+#ifndef _UTIL_H
+#define _UTIL_H
+#include "common.h"
 void failure(char * s);
 char * parse_string_offset(int fd, uint64_t off);
 size_t get_size(int fd);
