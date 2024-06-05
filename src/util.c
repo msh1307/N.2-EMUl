@@ -1,4 +1,4 @@
-#include "util.h"
+#include "../include/util.h"
 void failure(char * s){
     fprintf(stderr, "[-] %s\n", s);
 }
@@ -51,5 +51,6 @@ void hexdump(uint8_t * s, int size){
         }
         printf("%02x ", s[i]);
     }
+    putchar(0xa);
     putchar(0xa);
 }

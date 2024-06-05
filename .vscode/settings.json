@@ -33,6 +33,7 @@
         "main.h": "c",
         "stddef.h": "c",
         "system_error": "c",
-        "algorithm": "c"
+        "algorithm": "c",
+        "syscalls.h": "c"
     }
 }

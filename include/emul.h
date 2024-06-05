@@ -1,5 +1,6 @@
 #ifndef EMUL_H
 #define EMUL_H
+#include "syscalls.h"
 #include "libs.h"
 #include "util.h"
 #include "elf.h"
@@ -36,4 +37,7 @@ int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx)
 int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx);
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx);
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx);
+void emul_syscall_hook(uc_engine * uc, void * user_data);
+void handle_syscall(uc_engine * uc, uint64_t rax, uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r8, uint64_t r9);
+void sys_write(uc_engine * uc, uint64_t rdi, uint64_t rsi, uint64_t rdx);
 #endif

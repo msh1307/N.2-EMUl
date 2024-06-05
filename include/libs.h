@@ -2,6 +2,7 @@
 #define LIBS_H
 #include <libelf.h>
 #include <gelf.h>
+#include <elf.h>
 #include <unicorn/unicorn.h>
 #include <sys/mman.h>
 #include <stdint.h>

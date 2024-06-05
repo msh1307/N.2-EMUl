@@ -1,4 +1,4 @@
-#include "emul.h"
+#include "../include/emul.h"
 
 int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx){
     ctx -> init.interpreter.base = address;
@@ -34,7 +34,7 @@ int emul_load(uc_engine * uc, int fd, uint64_t address, struct bin_meta * bin){
     bin -> phdr = (uint64_t)phdrs - (uint64_t)data + address;
     bin -> entry = address + entry;
     bin -> phnum = phnum;
-    success("Entrypoint: %lx", bin -> entry);
+    success("Entrypoint: 0x%lx", bin -> entry);
     uc_err err = emul_map_memory(uc, address, phdrs, phnum);
     if (err != UC_ERR_OK){
         failure("emul_load() -> emul_map_memory()");
@@ -144,7 +144,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t stack_base = STACK_BASE;
     uint64_t stack_size = STACK_SIZE;
-    success("Mapping Stack  [%lx ~ %lx (%lx)]", stack_base, stack_base + stack_size, stack_size);
+    success("Mapping Stack  [0x%lx ~ 0x%lx (0x%lx)]", stack_base, stack_base + stack_size, stack_size);
     uc_err err = uc_mem_map(uc, stack_base, stack_size, UC_PROT_READ | UC_PROT_WRITE); // FIX ME: if NX bit disabled, stack must be mapped with prot_all
     if (err)
         return err;        
@@ -275,6 +275,18 @@ bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t
         case UC_MEM_WRITE_UNMAPPED:
             failure("SEGV WRITE");
             return true;
+        case UC_MEM_READ_PROT:
+            failure("SEGV READ PROT");
+            return true;
+        case UC_MEM_WRITE_PROT:
+            failure("SEGV WRITE PROT");
+            return true;
+        case UC_MEM_FETCH:
+            failure("SEGV FETCH");
+            return true;
+        case UC_MEM_FETCH_PROT:
+            failure("SEGV FETCH PROT");
+            return true;
         default:
             failure("SEGV ???");
             return true;
@@ -290,30 +302,7 @@ void emul_syscall_hook(uc_engine * uc, void * user_data){
     uc_reg_read(uc, UC_X86_REG_R10, &r10);
     uc_reg_read(uc, UC_X86_REG_R8, &r8);
     uc_reg_read(uc, UC_X86_REG_R9, &r9);
-    switch (rax){
-        case 1:
-            char * buf = malloc(rdx+1);
-            if (buf){
-                uc_mem_read(uc, rsi, buf, rdx);
-                success("emul: write(fd=%ld, buf=\"%s\", count=%ld)", rdi, buf, rdx);
-                uc_reg_write(uc, UC_X86_REG_RAX, &rdx);
-                free(buf);
-            }
-            else{
-                failure("emul: write() == 0xffffffffffffffff");
-                uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffff});
-            }
-            break;
-
-        case 60:
-            success("emul: exit()");
-            uc_emu_stop(uc);
-            break;
-
-        default:
-            success("emul: syscall(rax=%ld, rdi=%ld, rsi=%ld, rdx=%ld)", rax, rdi, rsi, rdx);
-            break;
-    }
+    handle_syscall(uc, rax, rdi, rsi, rdx, r10, r8, r9);
 }
 
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
@@ -326,3 +315,79 @@ uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
     
     return err;
 }
+
+
+
+
+
+
+
+
+
+// execve("./a.out", ["./a.out"], 0x7fff035c98b0 /* 46 vars */) = 0
+// brk(NULL)                               = 0x55f63d8af000
+// arch_prctl(0x3001 /* ARCH_??? */, 0x7ffd106cacb0) = -1 EINVAL (Invalid argument)
+// mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7efdaffb9000
+// access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
+// openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+// newfstatat(3, "", {st_mode=S_IFREG|0644, st_size=69983, ...}, AT_EMPTY_PATH) = 0
+// mmap(NULL, 69983, PROT_READ, MAP_PRIVATE, 3, 0) = 0x7efdaffa7000
+// close(3)                                = 0
+// openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+// read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0P\237\2\0\0\0\0\0"..., 832) = 832
+// pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+// pread64(3, "\4\0\0\0 \0\0\0\5\0\0\0GNU\0\2\0\0\300\4\0\0\0\3\0\0\0\0\0\0\0"..., 48, 848) = 48
+// pread64(3, "\4\0\0\0\24\0\0\0\3\0\0\0GNU\0I\17\357\204\3$\f\221\2039x\324\224\323\236S"..., 68, 896) = 68
+// newfstatat(3, "", {st_mode=S_IFREG|0755, st_size=2220400, ...}, AT_EMPTY_PATH) = 0
+// pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+// mmap(NULL, 2264656, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x7efdafd7e000
+// mprotect(0x7efdafda6000, 2023424, PROT_NONE) = 0
+// mmap(0x7efdafda6000, 1658880, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = 0x7efdafda6000
+// mmap(0x7efdaff3b000, 360448, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1bd000) = 0x7efdaff3b000
+// mmap(0x7efdaff94000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x215000) = 0x7efdaff94000
+// mmap(0x7efdaff9a000, 52816, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x7efdaff9a000
+// close(3)                                = 0
+// mmap(NULL, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7efdafd7b000
+// arch_prctl(ARCH_SET_FS, 0x7efdafd7b740) = 0
+// set_tid_address(0x7efdafd7ba10)         = 31957
+// set_robust_list(0x7efdafd7ba20, 24)     = 0
+// rseq(0x7efdafd7c0e0, 0x20, 0, 0x53053053) = 0
+// mprotect(0x7efdaff94000, 16384, PROT_READ) = 0
+// mprotect(0x55f63b92a000, 4096, PROT_READ) = 0
+// mprotect(0x7efdafff3000, 8192, PROT_READ) = 0
+// prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
+// munmap(0x7efdaffa7000, 69983)           = 0
+// getrandom("\xec\x22\xe5\x83\x3c\xf7\x46\xd0", 8, GRND_NONBLOCK) = 8
+// brk(NULL)                               = 0x55f63d8af000
+// brk(0x55f63d8d0000)                     = 0x55f63d8d0000
+// newfstatat(0, "", {st_mode=S_IFCHR|0620, st_rdev=makedev(0x88, 0x4), ...}, AT_EMPTY_PATH) = 0
+// read(0, 0x55f63d8af2d0, 1024)           = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
+// --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
+// read(0, 
+
+
+
+
+// 55f63b927000-55f63b928000 r--p 00000000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
+// 55f63b928000-55f63b929000 r-xp 00001000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
+// 55f63b929000-55f63b92a000 r--p 00002000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
+// 55f63b92a000-55f63b92b000 r--p 00002000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
+// 55f63b92b000-55f63b92c000 rw-p 00003000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
+// 55f63d8af000-55f63d8d0000 rw-p 00000000 00:00 0                          [heap]
+// 7efdafd7b000-7efdafd7e000 rw-p 00000000 00:00 0 
+// 7efdafd7e000-7efdafda6000 r--p 00000000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdafda6000-7efdaff3b000 r-xp 00028000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdaff3b000-7efdaff93000 r--p 001bd000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdaff93000-7efdaff94000 ---p 00215000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdaff94000-7efdaff98000 r--p 00215000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdaff98000-7efdaff9a000 rw-p 00219000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
+// 7efdaff9a000-7efdaffa7000 rw-p 00000000 00:00 0 
+// 7efdaffb9000-7efdaffbb000 rw-p 00000000 00:00 0 
+// 7efdaffbb000-7efdaffbd000 r--p 00000000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+// 7efdaffbd000-7efdaffe7000 r-xp 00002000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+// 7efdaffe7000-7efdafff2000 r--p 0002c000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+// 7efdafff3000-7efdafff5000 r--p 00037000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+// 7efdafff5000-7efdafff7000 rw-p 00039000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
+// 7ffd106ad000-7ffd106ce000 rw-p 00000000 00:00 0                          [stack]
+// 7ffd107df000-7ffd107e3000 r--p 00000000 00:00 0                          [vvar]
+// 7ffd107e3000-7ffd107e5000 r-xp 00000000 00:00 0                          [vdso]

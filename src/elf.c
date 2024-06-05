@@ -1,4 +1,4 @@
-#include "elf.h"
+#include "../include/elf.h"
 char * get_interpreter(int fd, void * bin){
     size_t cnt;
     int elfclass = 0;
