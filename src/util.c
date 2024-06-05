@@ -42,3 +42,14 @@ char * parse_string_offset (int fd, uint64_t off){
     }
     return NULL;
 }
+
+void hexdump(uint8_t * s, int size){
+    for (int i = 0; i < size; i++){
+        if (i % 0x10 == 0){
+            putchar(0xa);
+            printf(" %04x | ", i);
+        }
+        printf("%02x ", s[i]);
+    }
+    putchar(0xa);
+}

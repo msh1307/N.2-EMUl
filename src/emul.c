@@ -113,7 +113,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         (*ctx) -> envp = NULL;
     }
     else{
-        char **new_envp = (char **)malloc((argc -1 - sep) * sizeof(char *));
+        char **new_envp = (char **)malloc((argc - sep) * sizeof(char *));
         if (new_envp == NULL){
             failure("emul_setup_emul_ctx() -> malloc() failed");
             return -1;
@@ -126,7 +126,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         (*ctx) -> envp = new_envp;
     }
     c = 0;
-    char **new_argv = (char **)malloc((sep - 1) * sizeof(char *));
+    char **new_argv = (char **)malloc((sep) * sizeof(char *));
     if (new_argv == NULL){
         failure("emul_setup_emul_ctx() -> malloc() failed");
         return -1;
@@ -142,7 +142,6 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
 }
 
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
-    char debug[16];
     uint64_t stack_base = STACK_BASE;
     uint64_t stack_size = STACK_SIZE;
     success("Mapping Stack  [%lx ~ %lx (%lx)]", stack_base, stack_base + stack_size, stack_size);
@@ -234,7 +233,11 @@ uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     stack_top -= 4;
     push_str(uc, stack_top, "\x00\x00\x00\x00", 4);
     stack_top -= 4;
-   
+
+    uint8_t debug[0x100];
+    uc_mem_read(uc, stack_base + stack_size - 0x100, debug, 0x100);
+    hexdump(debug, 0x100);
+    
 }
 
 
@@ -243,26 +246,3 @@ uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
     uc_err err = uc_mem_write(uc, stack, str, size);
     return err;
 }
-
-
-// 0x7fffffffdf20: 0x0000000000000021      0x00007ffff7fc1000
-// 0x7fffffffdf30: 0x0000000000000033      0x00000000000006f0
-// 0x7fffffffdf40: 0x0000000000000010      0x000000001f8bfbff
-// 0x7fffffffdf50: 0x0000000000000006      0x0000000000001000
-// 0x7fffffffdf60: 0x0000000000000011      0x0000000000000064
-// 0x7fffffffdf70: 0x0000000000000003      0x0000555555554040
-// 0x7fffffffdf80: 0x0000000000000004      0x0000000000000038
-// 0x7fffffffdf90: 0x0000000000000005      0x000000000000000d
-// 0x7fffffffdfa0: 0x0000000000000007      0x00007ffff7fc3000
-// 0x7fffffffdfb0: 0x0000000000000008      0x0000000000000000
-// 0x7fffffffdfc0: 0x0000000000000009      0x0000555555555380
-// 0x7fffffffdfd0: 0x000000000000000b      0x0000000000000000
-// 0x7fffffffdfe0: 0x000000000000000c      0x0000000000000000
-// 0x7fffffffdff0: 0x000000000000000d      0x0000000000000000
-// 0x7fffffffe000: 0x000000000000000e      0x0000000000000000
-// 0x7fffffffe010: 0x0000000000000017      0x0000000000000000
-// 0x7fffffffe020: 0x0000000000000019      0x00007fffffffe079
-// 0x7fffffffe030: 0x000000000000001a      0x0000000000000002
-// 0x7fffffffe040: 0x000000000000001f      0x00007fffffffefd3
-// 0x7fffffffe050: 0x000000000000000f      0x00007fffffffe089
-// 0x7fffffffe060: 0x0000000000000000      0x0000000000000000
