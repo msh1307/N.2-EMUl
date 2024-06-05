@@ -10,4 +10,5 @@
 #define RANDOM_SEED "AAAAAAAAAAAAAAAA" // 128bit rand
 #define STACK_SIZE 0x10000 
 #define STACK_BASE 0x00007ffffffde000
+#define MEM_LIMIT 0x8000000
 #endif

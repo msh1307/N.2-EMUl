@@ -29,7 +29,7 @@ int main(int argc, char ** argv){
         return -1;
     }
     uc_engine *uc;
-    uc_err err_uc = uc_open (UC_ARCH_X86, UC_MODE_64, &uc);
+    uc_err err_uc = UC_ERR_CHECK(uc_open (UC_ARCH_X86, UC_MODE_64, &uc));
     if (err_uc != UC_ERR_OK){
         failure("Cannot initialize unicorn");
         return -1;

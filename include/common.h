@@ -14,4 +14,12 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <capstone/capstone.h> 
+static uc_err _uc_err_check(uc_err err, const char* expr)
+{
+    if (err) {
+        fprintf(stderr, "Failed on %s with error: %s\n", expr, uc_strerror(err)); exit(1);
+    }
+    return err;
+}
+#define UC_ERR_CHECK(x) _uc_err_check(x, #x)
 #endif 

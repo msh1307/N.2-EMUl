@@ -72,7 +72,7 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
                 uc_flags |= UC_PROT_WRITE;
             if (flags & PF_X)
                 uc_flags |= UC_PROT_EXEC;
-            uc_err err = uc_mem_map(uc, addr, sz, uc_flags);
+            uc_err err = UC_ERR_CHECK(uc_mem_map(uc, addr, sz, uc_flags));
             if (err)
                 return err;        
         }
@@ -237,14 +237,14 @@ uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     ctx -> init.rsp = stack_top;
 
     uint8_t debug[0x200];
-    uc_mem_read(uc, stack_base + stack_size - 0x200, debug, 0x200);
+    UC_ERR_CHECK(uc_mem_read(uc, stack_base + stack_size - 0x200, debug, 0x200));
     hexdump(debug, 0x200);
     
 }
 
 uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
     stack -= size;
-    uc_err err = uc_mem_write(uc, stack, str, size);
+    uc_err err = UC_ERR_CHECK(uc_mem_write(uc, stack, str, size));
     return err;
 }
 
@@ -255,7 +255,7 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) == CS_ERR_OK) {
         uint8_t code[32];
         memset(code, 0, sizeof(code));
-        uc_err err = uc_mem_read(uc, address, &code, size);
+        uc_err err = UC_ERR_CHECK(uc_mem_read(uc, address, &code, size));
         cs_insn *insn;
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
@@ -296,17 +296,17 @@ bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t
 
 void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rax, rdi, rsi, rdx, r10, r8, r9;
-    uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RAX, &rax));
     handle_syscall(uc, rax, ctx);
 }
 
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
     uc_hook step, fault, syscall;
-    uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp);
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
     // uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
-    uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0);
-    uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL);
-    uc_err err = uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0); 
+    UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0));
+    UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
+    uc_err err = UC_ERR_CHECK(uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0)); 
     
     return err;
 }
