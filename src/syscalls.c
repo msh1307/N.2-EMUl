@@ -4,6 +4,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, uint64_t rdi, uint64_t rsi, ui
         case 0x01:
             emu_sys_write(uc, rdi, rsi, rdx);
             break;
+        
+        case 0x0c:
+            emu_sys_brk(uc, rdi);
+            break;
             
         case 0x3c:
             success("emul: exit()");
@@ -29,4 +33,9 @@ void emu_sys_write(uc_engine * uc, uint64_t rdi, uint64_t rsi, uint64_t rdx){
         failure("emul: write() == 0xffffffffffffffff");
         uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffff});
     }
+}
+
+
+void emu_sys_brk(uc_engine * uc, uint64_t rdi){ // brk implementation with a fixed program break
+    
 }
