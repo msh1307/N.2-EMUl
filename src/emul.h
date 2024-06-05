@@ -15,6 +15,7 @@ struct bin_meta {
 struct initial {
     struct bin_meta interpreter;
     struct bin_meta user_bin;
+    uint64_t rsp;
 };
 
 struct emul_ctx {
@@ -34,4 +35,5 @@ uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size);
 int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx);
 int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx);
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx);
+uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx);
 #endif

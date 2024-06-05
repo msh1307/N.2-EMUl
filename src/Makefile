@@ -1,7 +1,7 @@
 CC=gcc                         
 OBJS=main.o util.o elf.o emul.o
 TARGET=app.out                  
-FLAGS=-lunicorn -lpthread -lm -lelf
+FLAGS=-lunicorn -lpthread -lm -lelf -lcapstone
 
 $(TARGET): $(OBJS) 
 	$(CC) -o $@ $(OBJS) $(FLAGS)

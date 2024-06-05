@@ -63,6 +63,12 @@ int main(int argc, char ** argv){
         failure("Failed to setup program stack");
         return -1;
     }
+
+    if (emul_run(uc, ctx) < 0){
+        failure("Failed to run the binary");
+        return -1;
+    }
+
     free(ctx -> envp); // ctx -> envp can be NULL ptr. but doesn't matter.
     free(ctx -> argv);
     free(ctx);

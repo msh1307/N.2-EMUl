@@ -12,4 +12,5 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <capstone/capstone.h> 
 #endif 

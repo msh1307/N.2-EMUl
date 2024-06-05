@@ -31,6 +31,8 @@
         "string.h": "c",
         "stdio.h": "c",
         "main.h": "c",
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "system_error": "c",
+        "algorithm": "c"
     }
 }

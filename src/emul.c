@@ -63,7 +63,7 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
             flags = phdrs[i].p_flags;
             addr = (base_address+vaddr)&0xfffffffffffff000;
             sz = (((base_address+vaddr+memsz - addr-1) / align) + 1) * align;
-            success("Mapping Memory [%lx ~ %lx (%lx)] FileOffset=%lx FLAGS=%lx", addr,addr+sz,sz,offset,flags);
+            success("Mapping Memory [0x%lx ~ 0x%lx (0x%lx)] FileOffset=0x%lx FLAGS=0x%lx", addr,addr+sz,sz,offset,flags);
             uint32_t uc_flags = 0;
             if (flags & PF_R)
                 uc_flags |= UC_PROT_READ;
@@ -86,7 +86,7 @@ uc_err emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf
                 uint64_t address = base_address+phdrs[i].p_vaddr;
                 uint64_t sz = phdrs[i].p_memsz;
                 uc_err err = uc_mem_write(uc, address, data+phdrs[i].p_offset, sz);
-                success("Writing Memory [%lx ~ %lx (%lx)]", address,address+sz,sz);
+                success("Writing Memory [0x%lx ~ 0x%lx (0x%lx)]", address,address+sz,sz);
                 if (err)
                     return err;
                 break;
@@ -201,7 +201,7 @@ uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     }
     stack_top -= 0x10;
     stack_top = (stack_top) & 0xfffffffffffffff0;
-    for (i = 0 ; i < c - 1; i ++){
+    for (i = 0 ; i < c; i ++){
         push_str(uc, stack_top, (char *)&auxv[i], 0x10);
         stack_top -= 0x10;
     }
@@ -229,20 +229,100 @@ uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
         stack_top -= 8;
         i++;
     }
-    push_str(uc, stack_top, (char *)&ctx -> argc, 4);
-    stack_top -= 4;
     push_str(uc, stack_top, "\x00\x00\x00\x00", 4);
     stack_top -= 4;
+    push_str(uc, stack_top, (char *)&ctx -> argc, 4);
+    stack_top -= 4;
+    ctx -> init.rsp = stack_top;
 
-    uint8_t debug[0x100];
-    uc_mem_read(uc, stack_base + stack_size - 0x100, debug, 0x100);
-    hexdump(debug, 0x100);
+    uint8_t debug[0x200];
+    uc_mem_read(uc, stack_base + stack_size - 0x200, debug, 0x200);
+    hexdump(debug, 0x200);
     
 }
-
 
 uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
     stack -= size;
     uc_err err = uc_mem_write(uc, stack, str, size);
+    return err;
+}
+
+
+void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
+{
+    csh handle;
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) == CS_ERR_OK) {
+        uint8_t code[32];
+        memset(code, 0, sizeof(code));
+        uc_err err = uc_mem_read(uc, address, &code, size);
+        cs_insn *insn;
+        size_t count = 0;
+        count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
+        if (count > 0) {
+            success("0x%lx:\t%s\t\t%s", insn[0].address, insn[0].mnemonic, insn[0].op_str);
+            cs_free(insn, count);
+        }
+        cs_close(&handle);
+    }
+}
+
+bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t size, void *user_data)
+{
+    switch(type) {
+        case UC_MEM_READ_UNMAPPED:
+            failure("SEGV READ");
+            return true;
+        case UC_MEM_WRITE_UNMAPPED:
+            failure("SEGV WRITE");
+            return true;
+        default:
+            failure("SEGV ???");
+            return true;
+    }
+}
+
+void emul_syscall_hook(uc_engine * uc, void * user_data){
+    uint64_t rax, rdi, rsi, rdx, r10, r8, r9;
+    uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+    uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+    uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+    uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+    uc_reg_read(uc, UC_X86_REG_R10, &r10);
+    uc_reg_read(uc, UC_X86_REG_R8, &r8);
+    uc_reg_read(uc, UC_X86_REG_R9, &r9);
+    switch (rax){
+        case 1:
+            char * buf = malloc(rdx+1);
+            if (buf){
+                uc_mem_read(uc, rsi, buf, rdx);
+                success("emul: write(fd=%ld, buf=\"%s\", count=%ld)", rdi, buf, rdx);
+                uc_reg_write(uc, UC_X86_REG_RAX, &rdx);
+                free(buf);
+            }
+            else{
+                failure("emul: write() == 0xffffffffffffffff");
+                uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffff});
+            }
+            break;
+
+        case 60:
+            success("emul: exit()");
+            uc_emu_stop(uc);
+            break;
+
+        default:
+            success("emul: syscall(rax=%ld, rdi=%ld, rsi=%ld, rdx=%ld)", rax, rdi, rsi, rdx);
+            break;
+    }
+}
+
+uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
+    uc_hook step, fault, syscall;
+    uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp);
+    // uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
+    uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0);
+    uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, NULL, 1, 0, UC_X86_INS_SYSCALL);
+    uc_err err = uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0); 
+    
     return err;
 }
