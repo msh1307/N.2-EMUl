@@ -29,11 +29,7 @@ int main(int argc, char ** argv){
         return -1;
     }
     uc_engine *uc;
-    uc_err err_uc = UC_ERR_CHECK(uc_open (UC_ARCH_X86, UC_MODE_64, &uc));
-    if (err_uc != UC_ERR_OK){
-        failure("Cannot initialize unicorn");
-        return -1;
-    }
+    UC_ERR_CHECK(uc_open(UC_ARCH_X86, UC_MODE_64, &uc));
     
     int err = interp_load(uc, interpreter_fd, ld_base, ctx);
     if (err < 0){
@@ -49,16 +45,8 @@ int main(int argc, char ** argv){
     close(interpreter_fd);
     close(fd);
 
-    
-    if (emul_setup_stack(uc, ctx) < 0){
-        failure("Failed to setup program stack");
-        return -1;
-    }
-
-    if (emul_run(uc, ctx) < 0){
-        failure("Failed to run the binary");
-        return -1;
-    }
+    emul_setup_stack(uc, ctx);
+    emul_run(uc, ctx);
 
     free(ctx -> envp); // ctx -> envp can be NULL ptr. but it doesn't matter.
     free(ctx -> argv);

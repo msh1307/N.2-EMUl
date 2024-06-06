@@ -5,5 +5,5 @@ void failure(char * s);
 char * parse_string_offset(int fd, uint64_t off);
 size_t get_size(int fd);
 int success(const char *format, ...);
-void hexdump(uint8_t * s, int size);
+void hexdump(uint64_t * s, int size);
 #endif 

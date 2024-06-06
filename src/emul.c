@@ -136,6 +136,17 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         new_argv[c++] = argv[i];
     }
     new_argv[c++] = NULL;
+    
+    char * cwd = malloc(0x100);
+    if ((*ctx) -> prog[0] != '/' && (*ctx) -> prog[0] != '~'){
+        if (getcwd(cwd, 0x100) == NULL) 
+            return -1;
+        cwd = realloc(cwd, strlen(cwd) + strlen((*ctx) -> prog) + 1);
+        strcat(cwd, "/");
+        strcat(cwd, (*ctx) -> prog);
+        (*ctx) -> prog = cwd;
+        puts(cwd);
+    }
 
     (*ctx) -> fd = (int *)malloc(sizeof(int) * FD_LIMIT);
     if ((*ctx) -> fd == NULL){
@@ -155,13 +166,11 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
     return 0;
 }
 
-uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
+void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t stack_base = STACK_BASE;
     uint64_t stack_size = STACK_SIZE;
     success("Mapping Stack  [0x%lx ~ 0x%lx (0x%lx)]", stack_base, stack_base + stack_size, stack_size);
-    uc_err err = uc_mem_map(uc, stack_base, stack_size, UC_PROT_READ | UC_PROT_WRITE); // FIX ME: if NX bit disabled, stack must be mapped with prot_all
-    if (err)
-        return err;        
+    UC_ERR_CHECK(uc_mem_map(uc, stack_base, stack_size, UC_PROT_READ | UC_PROT_WRITE)); // FIX ME: if NX bit disabled, stack must be mapped with prot_all
     int c = 0;
     Elf64_auxv_t * auxv = (Elf64_auxv_t * )malloc(sizeof(Elf64_auxv_t) * 20);
     uint64_t stack_top = stack_base + stack_size;
@@ -249,10 +258,12 @@ uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     stack_top -= 4;
     ctx -> init.rsp = stack_top;
 
-    uint8_t debug[0x200];
-    UC_ERR_CHECK(uc_mem_read(uc, stack_base + stack_size - 0x200, debug, 0x200));
-    hexdump(debug, 0x200);
-    
+    uint64_t debug[64];
+    UC_ERR_CHECK(uc_mem_read(uc, stack_base + stack_size - 64 * 8, debug, 64 * 8));
+    hexdump(debug, 64 * 8);
+    // char debug_str[40];
+    // UC_ERR_CHECK(uc_mem_read(uc, 0x00007ffffffedfc0, debug_str, 40));
+    // printf("read: %s\n", debug_str);
 }
 
 uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
@@ -332,12 +343,17 @@ void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
     handle_syscall(uc, rax, ctx);
 }
 
-uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
-    uc_hook step, fault, syscall;
+void emul_block_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data){
+	success("Tracing basic block at 0x%lx, block size = 0x%x\n", address, size);
+} // code coverage
+
+void emul_run(uc_engine * uc, struct emul_ctx * ctx){
+    uc_hook step, fault, syscall, block;
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
     UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0));
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
-    uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
-    uc_err err = UC_ERR_CHECK(uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0)); 
-    return err;
+    // UC_ERR_CHECK(uc_hook_add(uc, &block, UC_HOOK_BLOCK, (void *)emul_block_hook, NULL, 1, 0));
+    // UC_ERR_CHECK(uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0));
+    UC_ERR_CHECK(uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0)); 
+    return ;
 }

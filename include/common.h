@@ -14,6 +14,7 @@
 #include <unistd.h>
 #include <stdarg.h>
 #include <stddef.h>
+#include <unistd.h>
 #include <capstone/capstone.h> 
 static uc_err _uc_err_check(uc_err err, const char* expr)
 {
