@@ -1,7 +1,6 @@
 #include "../include/syscalls.h"
 
 void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
-    uint64_t rdi, rsi, rdx;
     switch (rax){
         case 0x01:
             emu_sys_write(uc, ctx);
@@ -25,6 +24,7 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
             break;
 
         default:
+            uint64_t rdi, rsi, rdx;
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
@@ -82,6 +82,7 @@ void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation w
         return ;
     uint64_t rdi;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    success("emul: brk(0x%lx)", rdi);
     if (rdi == 0)
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ctx -> program_break));
     else{
@@ -103,6 +104,7 @@ void emu_arch_prctl(uc_engine * uc){
     uint64_t rdi, rsi, tmp;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    success("emul: arch_prctl(0x%lx, 0x%lx)", rdi, rsi);
     switch (rdi){
         case 0x1001: // ARCH_SET_GS
             UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_GS_BASE, &rsi));

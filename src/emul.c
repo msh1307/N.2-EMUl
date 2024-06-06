@@ -85,7 +85,7 @@ uc_err emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf
         switch (phdrs[i].p_type){
             case PT_LOAD:
                 uint64_t address = base_address+phdrs[i].p_vaddr;
-                uint64_t sz = phdrs[i].p_memsz;
+                uint64_t sz = phdrs[i].p_filesz;
                 uc_err err = uc_mem_write(uc, address, data+phdrs[i].p_offset, sz);
                 success("Writing Memory [0x%lx ~ 0x%lx (0x%lx)]", address,address+sz,sz);
                 if (err)
@@ -196,12 +196,13 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_ENTRY, .a_un = { .a_val = ctx -> init.user_bin.entry }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_FLAGS, .a_un = { .a_val = 0ULL }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_BASE, .a_un = { .a_val = ctx -> init.interpreter.base }}; 
-    auxv[c++] = (Elf64_auxv_t){.a_type = AT_PHNUM, .a_un = { .a_val = 0ULL }}; 
+    auxv[c++] = (Elf64_auxv_t){.a_type = AT_PHNUM, .a_un = { .a_val = ctx -> init.user_bin.phnum }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_PHENT, .a_un = { .a_val = sizeof(Elf64_Phdr) }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_PHDR, .a_un = { .a_val = ctx -> init.user_bin.phdr }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_CLKTCK, .a_un = { .a_val = 100ULL }};
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_PAGESZ, .a_un = { .a_val = 0x1000ULL }}; // default page size
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_HWCAP, .a_un = { .a_val = 0x078bfbfdULL }}; // x86_64
+    auxv[c++] = (Elf64_auxv_t){.a_type = AT_MINSIGSTKSZ, .a_un = { .a_val = 0x6f0LL }}; 
     // no vdso AT_SYSINFO_EHDR
     uint64_t env_str = stack_top;
     int i = 0;
@@ -284,25 +285,29 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
 
-        // uint64_t rip;
-        // uc_reg_read(uc, UC_X86_REG_RIP, &rip);
-        // if (0x7ffff7fe27ff == rip){
-        //     char debug[0x20];
-        //     uint64_t rdi;
-        //     uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-        //     uc_mem_read(uc, rip, debug, 0x20);
-        //     puts("DEBUG");
-        //     puts(debug);
-        // }
-        uint64_t rax, rbx, rcx, rdx, rdi, rsi;
-        uc_reg_read(uc, UC_X86_REG_RAX, &rax);
-        uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
-        uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
-        uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-        uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-        uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
-        printf("rax=%lx rbx=%lx rcx=%lx rdx=%lx rdi=%lx rsi=%lx\n", rax, rbx, rcx, rdx, rdi, rsi);
+        uint64_t rip;
+        uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+        char debug[0x30];
+        if (rip == 0x7ffff7fe57f2){
+            uint64_t rax, rbx, rcx, rdx, rdi, rsi, r12;
+            uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+            uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
+            uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+            uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+            uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+            uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+            uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
+            uc_reg_read(uc, UC_X86_REG_R12, &r12);
+            printf("rax=%lx rbx=%lx rdi=%lx rsi=%lx rdx=%lx rcx=%lx r12=%lx\n", rax, rbx, rdi, rsi, rdx, rcx, r12);
+            uc_mem_read(uc, r12, debug, 0x30);
+            hexdump(debug, 0x30);
+        }
+        
 
+        uc_mem_read(uc, 0x7ffff7ffe280ULL, debug, 0x30);
+        hexdump(debug, 0x30);
+        
+        
         if (count > 0) {
             success("0x%lx:\t%s\t\t%s", insn[0].address, insn[0].mnemonic, insn[0].op_str);
             cs_free(insn, count);
@@ -345,11 +350,12 @@ void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
 }
 
 void emul_block_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data){
-	success("Tracing basic block at 0x%lx, block size = 0x%x\n", address, size);
+	success("Tracing basic block at 0x%lx, block size = 0x%x", address, size);
 } // code coverage
 
 void emul_run(uc_engine * uc, struct emul_ctx * ctx){
     uc_hook step, fault, syscall, block;
+    success("Running %s", ctx -> prog);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
     UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0));
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
