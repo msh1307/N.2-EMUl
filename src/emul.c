@@ -159,6 +159,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
     (*ctx) -> fd[1] |= 1 << 16;
     (*ctx) -> fd[2] = 2;
     (*ctx) -> fd[2] |= 1 << 16;
+    (*ctx) -> fd_cur = 3;
     (*ctx) -> argv = new_argv;
     (*ctx) -> argc = c-1;
     (*ctx) -> platform = "x86_64";
@@ -285,28 +286,23 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
 
-        uint64_t rip;
-        uc_reg_read(uc, UC_X86_REG_RIP, &rip);
-        char debug[0x30];
-        if (rip == 0x7ffff7fe57f2){
-            uint64_t rax, rbx, rcx, rdx, rdi, rsi, r12;
-            uc_reg_read(uc, UC_X86_REG_RAX, &rax);
-            uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
-            uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-            uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-            uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
-            uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-            uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
-            uc_reg_read(uc, UC_X86_REG_R12, &r12);
-            printf("rax=%lx rbx=%lx rdi=%lx rsi=%lx rdx=%lx rcx=%lx r12=%lx\n", rax, rbx, rdi, rsi, rdx, rcx, r12);
-            uc_mem_read(uc, r12, debug, 0x30);
-            hexdump(debug, 0x30);
-        }
-        
-
-        uc_mem_read(uc, 0x7ffff7ffe280ULL, debug, 0x30);
-        hexdump(debug, 0x30);
-        
+        // uint64_t rip;
+        // uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+        // char debug[0x30];
+        // if (rip == 0x7ffff7fe57f2){
+        //     uint64_t rax, rbx, rcx, rdx, rdi, rsi, r12;
+        //     uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+        //     uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
+        //     uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+        //     uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+        //     uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+        //     uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+        //     uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
+        //     uc_reg_read(uc, UC_X86_REG_R12, &r12);
+        //     printf("rax=%lx rbx=%lx rdi=%lx rsi=%lx rdx=%lx rcx=%lx r12=%lx\n", rax, rbx, rdi, rsi, rdx, rcx, r12);
+        //     uc_mem_read(uc, r12, debug, 0x30);
+        //     hexdump(debug, 0x30);
+        // }
         
         if (count > 0) {
             success("0x%lx:\t%s\t\t%s", insn[0].address, insn[0].mnemonic, insn[0].op_str);

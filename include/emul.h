@@ -27,6 +27,7 @@ struct emul_ctx {
     struct initial init;
     uint64_t program_break; 
     int * fd;
+    int fd_cur;
 };
 
 #include "syscalls.h"
