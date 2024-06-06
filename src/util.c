@@ -47,9 +47,9 @@ void hexdump(uint64_t * s, int size){
     for (int i = 0; i < size/8; i++){
         if (i % 0x2 == 0){
             putchar(0xa);
-            printf(" %04x | ", i*8);
+            // printf(" %04x | ", i*8);
         }
-        printf("%016lx ", s[i]);
+        printf("0x%016lx ", s[i]);
     }
     putchar(0xa);
     putchar(0xa);

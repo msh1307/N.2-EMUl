@@ -145,7 +145,6 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         strcat(cwd, "/");
         strcat(cwd, (*ctx) -> prog);
         (*ctx) -> prog = cwd;
-        puts(cwd);
     }
 
     (*ctx) -> fd = (int *)malloc(sizeof(int) * FD_LIMIT);
@@ -222,8 +221,10 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
         stack_top -= len;
         i++;
     }
-    stack_top -= 0x10;
+    push_str(uc, stack_top, "\x00\x00\x00\x00\x00\x00\x00\x00", 8);
+    stack_top -= 0x8;
     stack_top = (stack_top) & 0xfffffffffffffff0;
+
     for (i = 0 ; i < c; i ++){
         push_str(uc, stack_top, (char *)&auxv[i], 0x10);
         stack_top -= 0x10;
@@ -258,18 +259,18 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     stack_top -= 4;
     ctx -> init.rsp = stack_top;
 
-    uint64_t debug[64];
-    UC_ERR_CHECK(uc_mem_read(uc, stack_base + stack_size - 64 * 8, debug, 64 * 8));
-    hexdump(debug, 64 * 8);
+    uint64_t debug[100];
+    success("rsp = 0x%lx\n", stack_top);
+    UC_ERR_CHECK(uc_mem_read(uc, stack_top, debug, stack_size + stack_base - stack_top));
+    hexdump(debug, stack_size + stack_base - stack_top); 
     // char debug_str[40];
     // UC_ERR_CHECK(uc_mem_read(uc, 0x00007ffffffedfc0, debug_str, 40));
     // printf("read: %s\n", debug_str);
 }
 
-uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
+void push_str(uc_engine * uc, uint64_t stack, char * str, int size){
     stack -= size;
-    uc_err err = UC_ERR_CHECK(uc_mem_write(uc, stack, str, size));
-    return err;
+    UC_ERR_CHECK(uc_mem_write(uc, stack, str, size));
 }
 
 void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
@@ -283,16 +284,16 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
 
-        uint64_t rip;
-        uc_reg_read(uc, UC_X86_REG_RIP, &rip);
-        if (0x7ffff7fe27ff == rip){
-            char debug[0x20];
-            uint64_t rdi;
-            uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-            uc_mem_read(uc, rip, debug, 0x20);
-            puts("DEBUG");
-            puts(debug);
-        }
+        // uint64_t rip;
+        // uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+        // if (0x7ffff7fe27ff == rip){
+        //     char debug[0x20];
+        //     uint64_t rdi;
+        //     uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+        //     uc_mem_read(uc, rip, debug, 0x20);
+        //     puts("DEBUG");
+        //     puts(debug);
+        // }
         uint64_t rax, rbx, rcx, rdx, rdi, rsi;
         uc_reg_read(uc, UC_X86_REG_RAX, &rax);
         uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
