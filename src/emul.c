@@ -136,6 +136,19 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         new_argv[c++] = argv[i];
     }
     new_argv[c++] = NULL;
+
+    (*ctx) -> fd = (int *)malloc(sizeof(int) * FD_LIMIT);
+    if ((*ctx) -> fd == NULL){
+        failure("emul_setup_emul_ctx() -> malloc() failed");
+        return -1;
+    }
+    memset((void *)(*ctx) -> fd, 0, sizeof(int) * FD_LIMIT);
+    (*ctx) -> fd[0] = 0;
+    (*ctx) -> fd[0] |= 1 << 16;
+    (*ctx) -> fd[1] = 1;
+    (*ctx) -> fd[1] |= 1 << 16;
+    (*ctx) -> fd[2] = 2;
+    (*ctx) -> fd[2] |= 1 << 16;
     (*ctx) -> argv = new_argv;
     (*ctx) -> argc = c-1;
     (*ctx) -> platform = "x86_64";
@@ -248,7 +261,6 @@ uc_err push_str(uc_engine * uc, uint64_t stack, char * str, int size){
     return err;
 }
 
-
 void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data)
 {
     csh handle;
@@ -259,6 +271,26 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
         cs_insn *insn;
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
+
+        uint64_t rip;
+        uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+        if (0x7ffff7fe27ff == rip){
+            char debug[0x20];
+            uint64_t rdi;
+            uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+            uc_mem_read(uc, rip, debug, 0x20);
+            puts("DEBUG");
+            puts(debug);
+        }
+        uint64_t rax, rbx, rcx, rdx, rdi, rsi;
+        uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+        uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
+        uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
+        uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+        uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+        uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+        printf("rax=%lx rbx=%lx rcx=%lx rdx=%lx rdi=%lx rsi=%lx\n", rax, rbx, rcx, rdx, rdi, rsi);
+
         if (count > 0) {
             success("0x%lx:\t%s\t\t%s", insn[0].address, insn[0].mnemonic, insn[0].op_str);
             cs_free(insn, count);
@@ -303,86 +335,9 @@ void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx){
     uc_hook step, fault, syscall;
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
-    // uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
     UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0));
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
+    uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0);
     uc_err err = UC_ERR_CHECK(uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0)); 
-    
     return err;
 }
-
-
-
-
-
-
-
-
-
-// execve("./a.out", ["./a.out"], 0x7fff035c98b0 /* 46 vars */) = 0
-// brk(NULL)                               = 0x55f63d8af000
-// arch_prctl(0x3001 /* ARCH_??? */, 0x7ffd106cacb0) = -1 EINVAL (Invalid argument)
-// mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7efdaffb9000
-// access("/etc/ld.so.preload", R_OK)      = -1 ENOENT (No such file or directory)
-// openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
-// newfstatat(3, "", {st_mode=S_IFREG|0644, st_size=69983, ...}, AT_EMPTY_PATH) = 0
-// mmap(NULL, 69983, PROT_READ, MAP_PRIVATE, 3, 0) = 0x7efdaffa7000
-// close(3)                                = 0
-// openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
-// read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0P\237\2\0\0\0\0\0"..., 832) = 832
-// pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
-// pread64(3, "\4\0\0\0 \0\0\0\5\0\0\0GNU\0\2\0\0\300\4\0\0\0\3\0\0\0\0\0\0\0"..., 48, 848) = 48
-// pread64(3, "\4\0\0\0\24\0\0\0\3\0\0\0GNU\0I\17\357\204\3$\f\221\2039x\324\224\323\236S"..., 68, 896) = 68
-// newfstatat(3, "", {st_mode=S_IFREG|0755, st_size=2220400, ...}, AT_EMPTY_PATH) = 0
-// pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
-// mmap(NULL, 2264656, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x7efdafd7e000
-// mprotect(0x7efdafda6000, 2023424, PROT_NONE) = 0
-// mmap(0x7efdafda6000, 1658880, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = 0x7efdafda6000
-// mmap(0x7efdaff3b000, 360448, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1bd000) = 0x7efdaff3b000
-// mmap(0x7efdaff94000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x215000) = 0x7efdaff94000
-// mmap(0x7efdaff9a000, 52816, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x7efdaff9a000
-// close(3)                                = 0
-// mmap(NULL, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x7efdafd7b000
-// arch_prctl(ARCH_SET_FS, 0x7efdafd7b740) = 0
-// set_tid_address(0x7efdafd7ba10)         = 31957
-// set_robust_list(0x7efdafd7ba20, 24)     = 0
-// rseq(0x7efdafd7c0e0, 0x20, 0, 0x53053053) = 0
-// mprotect(0x7efdaff94000, 16384, PROT_READ) = 0
-// mprotect(0x55f63b92a000, 4096, PROT_READ) = 0
-// mprotect(0x7efdafff3000, 8192, PROT_READ) = 0
-// prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
-// munmap(0x7efdaffa7000, 69983)           = 0
-// getrandom("\xec\x22\xe5\x83\x3c\xf7\x46\xd0", 8, GRND_NONBLOCK) = 8
-// brk(NULL)                               = 0x55f63d8af000
-// brk(0x55f63d8d0000)                     = 0x55f63d8d0000
-// newfstatat(0, "", {st_mode=S_IFCHR|0620, st_rdev=makedev(0x88, 0x4), ...}, AT_EMPTY_PATH) = 0
-// read(0, 0x55f63d8af2d0, 1024)           = ? ERESTARTSYS (To be restarted if SA_RESTART is set)
-// --- SIGWINCH {si_signo=SIGWINCH, si_code=SI_KERNEL} ---
-// read(0, 
-
-
-
-
-// 55f63b927000-55f63b928000 r--p 00000000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
-// 55f63b928000-55f63b929000 r-xp 00001000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
-// 55f63b929000-55f63b92a000 r--p 00002000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
-// 55f63b92a000-55f63b92b000 r--p 00002000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
-// 55f63b92b000-55f63b92c000 rw-p 00003000 08:20 174919                     /root/Workspace/N.2-EMUl/a.out
-// 55f63d8af000-55f63d8d0000 rw-p 00000000 00:00 0                          [heap]
-// 7efdafd7b000-7efdafd7e000 rw-p 00000000 00:00 0 
-// 7efdafd7e000-7efdafda6000 r--p 00000000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdafda6000-7efdaff3b000 r-xp 00028000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdaff3b000-7efdaff93000 r--p 001bd000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdaff93000-7efdaff94000 ---p 00215000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdaff94000-7efdaff98000 r--p 00215000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdaff98000-7efdaff9a000 rw-p 00219000 08:20 145440                     /usr/lib/x86_64-linux-gnu/libc.so.6
-// 7efdaff9a000-7efdaffa7000 rw-p 00000000 00:00 0 
-// 7efdaffb9000-7efdaffbb000 rw-p 00000000 00:00 0 
-// 7efdaffbb000-7efdaffbd000 r--p 00000000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
-// 7efdaffbd000-7efdaffe7000 r-xp 00002000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
-// 7efdaffe7000-7efdafff2000 r--p 0002c000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
-// 7efdafff3000-7efdafff5000 r--p 00037000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
-// 7efdafff5000-7efdafff7000 rw-p 00039000 08:20 145429                     /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2
-// 7ffd106ad000-7ffd106ce000 rw-p 00000000 00:00 0                          [stack]
-// 7ffd107df000-7ffd107e3000 r--p 00000000 00:00 0                          [vvar]
-// 7ffd107e3000-7ffd107e5000 r-xp 00000000 00:00 0                          [vdso]

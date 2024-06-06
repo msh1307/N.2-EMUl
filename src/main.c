@@ -62,6 +62,7 @@ int main(int argc, char ** argv){
 
     free(ctx -> envp); // ctx -> envp can be NULL ptr. but it doesn't matter.
     free(ctx -> argv);
+    free(ctx -> fd);
     free(ctx);
 
 }

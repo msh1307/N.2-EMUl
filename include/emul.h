@@ -26,6 +26,7 @@ struct emul_ctx {
     char * platform;
     struct initial init;
     uint64_t program_break; 
+    int * fd;
 };
 
 #include "syscalls.h"
@@ -40,4 +41,6 @@ int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx);
 uc_err emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx);
 uc_err emul_run(uc_engine * uc, struct emul_ctx * ctx);
 void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx);
+void cpuid(uint64_t * rax, uint64_t * rbx, uint64_t * rcx, uint64_t * rdx);
+void emul_cpuid_hook(uc_engine * uc, void * user_data);
 #endif
