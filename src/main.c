@@ -47,7 +47,7 @@ int main(int argc, char ** argv){
 
     emul_setup_stack(uc, ctx);
     emul_run(uc, ctx);
-
+    uc_close(uc);
     free(ctx -> envp); // ctx -> envp can be NULL ptr. but it doesn't matter.
     free(ctx -> argv);
     free(ctx -> fd);

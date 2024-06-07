@@ -66,13 +66,13 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
             sz = (((base_address+vaddr+memsz - addr-1) / align) + 1) * align;
             success("Mapping Memory [0x%lx ~ 0x%lx (0x%lx)] FileOffset=0x%lx FLAGS=0x%lx", addr,addr+sz,sz,offset,flags);
             uint32_t uc_flags = 0;
-            if (flags & PF_R)
+            if (flags & 4)
                 uc_flags |= UC_PROT_READ;
-            if (flags & PF_W)
+            if (flags & 2)
                 uc_flags |= UC_PROT_WRITE;
-            if (flags & PF_X)
+            if (flags & 1)
                 uc_flags |= UC_PROT_EXEC;
-            uc_err err = UC_ERR_CHECK(uc_mem_map(uc, addr, sz, uc_flags));
+            uc_err err = uc_mem_map(uc, addr, sz, uc_flags);
             if (err)
                 return err;        
         }
@@ -281,29 +281,10 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) == CS_ERR_OK) {
         uint8_t code[32];
         memset(code, 0, sizeof(code));
-        uc_err err = UC_ERR_CHECK(uc_mem_read(uc, address, &code, size));
+        UC_ERR_CHECK(uc_mem_read(uc, address, &code, size));
         cs_insn *insn;
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &code, sizeof(code)-1, address, 0, &insn);
-
-        // uint64_t rip;
-        // uc_reg_read(uc, UC_X86_REG_RIP, &rip);
-        // char debug[0x30];
-        // if (rip == 0x7ffff7fe57f2){
-        //     uint64_t rax, rbx, rcx, rdx, rdi, rsi, r12;
-        //     uc_reg_read(uc, UC_X86_REG_RAX, &rax);
-        //     uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
-        //     uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-        //     uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
-        //     uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
-        //     uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
-        //     uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
-        //     uc_reg_read(uc, UC_X86_REG_R12, &r12);
-        //     printf("rax=%lx rbx=%lx rdi=%lx rsi=%lx rdx=%lx rcx=%lx r12=%lx\n", rax, rbx, rdi, rsi, rdx, rcx, r12);
-        //     uc_mem_read(uc, r12, debug, 0x30);
-        //     hexdump(debug, 0x30);
-        // }
-        
         if (count > 0) {
             success("0x%lx:\t%s\t\t%s", insn[0].address, insn[0].mnemonic, insn[0].op_str);
             cs_free(insn, count);
@@ -314,29 +295,121 @@ void emul_step_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_d
 
 bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t size, void *user_data)
 {
+    putchar(0xa);
+    failure("Program crashed");
+    dump_memory_map(uc);
+    putchar(0xa);
+    dump_registers(uc);
     switch(type) {
         case UC_MEM_READ_UNMAPPED:
-            failure("SEGV READ");
-            return true;
+            failure("Invalid Memory Read (UNMAPPED) 0x%lx", address);
+            break;
+
         case UC_MEM_WRITE_UNMAPPED:
-            failure("SEGV WRITE");
-            return true;
+            failure("Invalid Memory Write (UNMAPPED) 0x%lx", address);
+            break;
+
+        case UC_MEM_FETCH_UNMAPPED:
+            failure("Invalid Memory Fetch (UMAPPED) 0x%lx", address);
+            break;
+
         case UC_MEM_READ_PROT:
-            failure("SEGV READ PROT");
-            return true;
+            failure("Invalid Memory Read (PROT) 0x%lx", address);
+            break;
+            
         case UC_MEM_WRITE_PROT:
-            failure("SEGV WRITE PROT");
-            return true;
-        case UC_MEM_FETCH:
-            failure("SEGV FETCH");
-            return true;
+            failure("Invalid Memory Write (PROT) 0x%lx", address);
+            break;
+
         case UC_MEM_FETCH_PROT:
-            failure("SEGV FETCH PROT");
-            return true;
+            failure("Invalid Memory Fetch (PROT) 0x%lx", address);
+            break;
+
         default:
-            failure("SEGV ???");
-            return true;
+            failure("Unreachable? 0x%lx", address);
+            break;
     }
+    uint8_t debug[0x30];
+    uint64_t rip;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RIP, &rip));
+    UC_ERR_CHECK(uc_mem_read(uc, rip, debug, 0x30));
+    csh handle;
+    if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) == CS_ERR_OK) {
+        cs_insn *insn;
+        size_t count = 0;
+        count = cs_disasm(handle, (uint8_t *) &debug, sizeof(debug)-1, rip, 0, &insn);
+        if (count > 0) {
+            failure("0x%lx:\t%s\t\t%s", insn[1].address, insn[1].mnemonic, insn[1].op_str);
+            cs_free(insn, count);
+        }
+        cs_close(&handle);
+    }
+    return false;
+}
+
+void dump_memory_map(uc_engine * uc){
+    uc_mem_region *regions;
+    uint32_t region_count;
+    uc_mem_regions(uc, &regions, &region_count);
+    printf("Memory Mappings:\n");
+    for (uint32_t i = 0; i < region_count; i++) {
+        uc_mem_region *region = &regions[i];
+        printf("  Address: 0x%lx-0x%lx, Size: 0x%05lx, Permissions: ",
+               region->begin, region->end - 1, region->end - region->begin);
+        if (region->perms & UC_PROT_READ)
+            printf("READ ");
+        if (region->perms & UC_PROT_WRITE)
+            printf("WRITE ");
+        if (region->perms & UC_PROT_EXEC)
+            printf("EXEC");
+        printf("\n");
+    }
+    uc_free(regions);
+}
+
+void dump_registers(uc_engine *uc) {
+    uint64_t rax, rbx, rcx, rdx, rsi, rdi, rbp, rsp, r8, r9, r10, r11, r12, r13, r14, r15;
+    uint64_t rip;
+    uint32_t eflags;
+
+    uc_reg_read(uc, UC_X86_REG_RAX, &rax);
+    uc_reg_read(uc, UC_X86_REG_RBX, &rbx);
+    uc_reg_read(uc, UC_X86_REG_RCX, &rcx);
+    uc_reg_read(uc, UC_X86_REG_RDX, &rdx);
+    uc_reg_read(uc, UC_X86_REG_RSI, &rsi);
+    uc_reg_read(uc, UC_X86_REG_RDI, &rdi);
+    uc_reg_read(uc, UC_X86_REG_RBP, &rbp);
+    uc_reg_read(uc, UC_X86_REG_RSP, &rsp);
+    uc_reg_read(uc, UC_X86_REG_R8, &r8);
+    uc_reg_read(uc, UC_X86_REG_R9, &r9);
+    uc_reg_read(uc, UC_X86_REG_R10, &r10);
+    uc_reg_read(uc, UC_X86_REG_R11, &r11);
+    uc_reg_read(uc, UC_X86_REG_R12, &r12);
+    uc_reg_read(uc, UC_X86_REG_R13, &r13);
+    uc_reg_read(uc, UC_X86_REG_R14, &r14);
+    uc_reg_read(uc, UC_X86_REG_R15, &r15);
+    uc_reg_read(uc, UC_X86_REG_RIP, &rip);
+    uc_reg_read(uc, UC_X86_REG_EFLAGS, &eflags);
+
+    printf("Registers:\n");
+    printf("  RAX: 0x%016lx\n", rax);
+    printf("  RBX: 0x%016lx\n", rbx);
+    printf("  RCX: 0x%016lx\n", rcx);
+    printf("  RDX: 0x%016lx\n", rdx);
+    printf("  RSI: 0x%016lx\n", rsi);
+    printf("  RDI: 0x%016lx\n", rdi);
+    printf("  RBP: 0x%016lx\n", rbp);
+    printf("  RSP: 0x%016lx\n", rsp);
+    printf("  R8 : 0x%016lx\n", r8);
+    printf("  R9 : 0x%016lx\n", r9);
+    printf("  R10: 0x%016lx\n", r10);
+    printf("  R11: 0x%016lx\n", r11);
+    printf("  R12: 0x%016lx\n", r12);
+    printf("  R13: 0x%016lx\n", r13);
+    printf("  R14: 0x%016lx\n", r14);
+    printf("  R15: 0x%016lx\n", r15);
+    printf("  RIP: 0x%016lx\n", rip);
+    printf("  EFLAGS: 0x%08x\n", eflags);
 }
 
 void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
@@ -353,7 +426,7 @@ void emul_run(uc_engine * uc, struct emul_ctx * ctx){
     uc_hook step, fault, syscall, block;
     success("Running %s", ctx -> prog);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
-    UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_READ_UNMAPPED | UC_HOOK_MEM_WRITE_UNMAPPED, (void *)emul_fault_hook, NULL, 1, 0));
+    UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_INVALID, (void *)emul_fault_hook, NULL, 1, 0)); // it covers fetch & read/write prot ...
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
     // UC_ERR_CHECK(uc_hook_add(uc, &block, UC_HOOK_BLOCK, (void *)emul_block_hook, NULL, 1, 0));
     // UC_ERR_CHECK(uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0));

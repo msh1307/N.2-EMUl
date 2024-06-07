@@ -43,4 +43,6 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx);
 void emul_run(uc_engine * uc, struct emul_ctx * ctx);
 void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx);
 void emul_block_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data);
+void dump_memory_map(uc_engine * uc);
+void dump_registers(uc_engine *uc);
 #endif

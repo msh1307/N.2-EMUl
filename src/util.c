@@ -30,9 +30,6 @@ int success(const char *format, ...) {
     return result;
 }
 
-
-
-
 size_t get_size(int fd){
     size_t sz = lseek(fd, 0, SEEK_END);
     lseek(fd, 0, SEEK_SET);
@@ -60,9 +57,8 @@ char * parse_string_offset (int fd, uint64_t off){
 
 void hexdump(uint64_t * s, int size){
     for (int i = 0; i < size/8; i++){
-        if (i % 0x2 == 0){
+        if (i % 0x2 == 0 && i != 0){
             putchar(0xa);
-            // printf(" %04x | ", i*8);
         }
         printf("0x%016lx ", s[i]);
     }
