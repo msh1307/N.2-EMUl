@@ -1,6 +1,18 @@
 #include "../include/util.h"
-void failure(char * s){
-    fprintf(stderr, "[-] %s\n", s);
+
+int failure(const char *format, ...){
+    int l = strlen(format);
+    char * buf = malloc(l+0x10);
+    memset(buf, 0,l+0x10);
+    strcpy(buf, "[-] ");
+    strcat(buf, format);
+    buf[l+4] = '\x0a';
+    va_list args;
+    va_start(args, format);
+    int result = vfprintf(stderr, buf, args);
+    va_end(args);
+    free(buf);
+    return result;
 }
 
 int success(const char *format, ...) {
@@ -17,6 +29,9 @@ int success(const char *format, ...) {
     free(buf);
     return result;
 }
+
+
+
 
 size_t get_size(int fd){
     size_t sz = lseek(fd, 0, SEEK_END);

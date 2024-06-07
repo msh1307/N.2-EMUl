@@ -17,6 +17,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0x14:
             emu_sys_writev(uc, ctx);
             break;
+        
+        case 0x15:
+            emu_sys_access(uc);
+            break;
             
         case 0x3c:
             success("emul: exit()");
@@ -33,6 +37,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         
         case 0x101:
             emu_sys_openat(uc, ctx);
+            break;
+        
+        case 0x106:
+            emu_sys_newfstatat(uc, ctx);
             break;
 
         default:
@@ -63,11 +71,13 @@ void emu_sys_write(uc_engine * uc, struct emul_ctx * ctx){
             }
         }
     }
-    failure("emul: write() == 0xffffffffffffffff");
+    failure("emul: write(fd=0x%lx, buf=0x%lx, count=0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
 void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation with a fixed program break 
+    uint64_t rdi;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     if (ctx -> program_break == -1){ 
         uint64_t address = ctx -> init.user_bin.base;
         uc_mem_region *regions;
@@ -91,11 +101,9 @@ void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation w
             ctx -> program_break = -2;
     }
     else if (ctx -> program_break == -2){
-        failure("emul: brk() == 0xffffffffffffffff");
+        failure("emul: brk(0x%lx) == 0xffffffffffffffff", rdi);
         return ;
     }
-    uint64_t rdi;
-    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     success("emul: brk(0x%lx)", rdi);
     if (rdi == 0)
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ctx -> program_break));
@@ -176,7 +184,7 @@ void emu_sys_writev(uc_engine *uc, struct emul_ctx * ctx){
         }
     }
     fail:
-        failure("emul: writev() == 0xffffffffffffffff");
+        failure("emul: writev(fd=0x%lx, iovec=0x%lx, vlen=0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx);
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
@@ -194,32 +202,41 @@ void emu_sys_uname(uc_engine * uc){ // when vdso not supported (emulated) uname 
     success("emul: sys_uname(0x%lx)",rdi);
 }
 
+char * get_filename(uc_engine * uc, uint64_t address){
+    uint32_t i, len;
+    i = 0x30;
+    char * filename = malloc(i);
+    if (filename){
+        while (1){
+            UC_ERR_CHECK(uc_mem_read(uc, address, filename, i));
+            len = strlen(filename);
+            if (len < i - 8)
+                return filename;
+            filename = realloc(filename, i * 2);
+            i *= 2;
+        }
+    }
+    return NULL;
+}
+
 void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx, r10;
-    uint32_t len, i, fd;
+    uint32_t fd;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R10, &r10));
-    i = 0x30;
-    char * file = malloc(i);
-    while (1){
-        UC_ERR_CHECK(uc_mem_read(uc, rsi, file, i));
-        len = strlen(file);
-        if (len > i - 8){
-            file = realloc(file, i * 2);
-            i *= 2;
-        }
-        break;
-    }
+    char * filename = get_filename(uc, rsi);
+    if (filename == NULL)
+        goto fail;
     if (rdi != 0xffffff9c && rdi < FD_LIMIT){
         if ((ctx -> fd[rdi]) >> 16)
-            fd = openat(ctx -> fd[rdi] & 0xffff, file, rdx, r10);
+            fd = openat(ctx -> fd[rdi] & 0xffff, filename, rdx, r10);
         else
             goto fail;
     }
     else
-        fd = openat(0xffffff9c, file, rdx, r10);
+        fd = openat(0xffffff9c, filename, rdx, r10);
 
     if (fd > 0xffff){
         failure("File descriptor exceed 0xffff");
@@ -233,10 +250,12 @@ void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
     ctx -> fd[ctx -> fd_cur] |= 0x1 << 16;
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ctx -> fd_cur));
     ctx -> fd_cur += 1;
-    success("emul: sys_openat(0x%lx, %s, 0x%lx, 0x%lx)", rdi, file, rdx, r10);
+    success("emul: sys_openat(0x%lx, \"%s\", 0x%lx, 0x%lx)", rdi, filename, rdx, r10);
+    free(filename);
     return ;
     fail:
-        failure("emul: sys_openat() == 0xffffffffffffffff");
+        free(filename); // file can be null ptr. but fine
+        failure("emul: sys_openat(0x%lx, \"%s\", 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, filename, rdx, r10);
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
@@ -257,6 +276,60 @@ void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
             }
         }
     }
-    failure("emul: sys_read() == 0xffffffffffffffff");
+    failure("emul: sys_read(0x%lx, 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+}
+
+void emu_sys_access(uc_engine * uc){
+    uint64_t rdi, rsi;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    char * filename = get_filename(uc, rdi);
+    if (filename == NULL)
+        goto fail;
+    int64_t ret = (int64_t)access(filename, rsi);
+    if (ret < 0)
+        goto fail;
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ret));
+    success("emul: sys_access(\"%s\", 0x%lx)", filename, rsi);
+    free(filename);
+    return ;
+    fail:
+        failure("emul: sys_access(\"%s\", 0x%lx) == 0xffffffffffffffff", filename, rsi);
+        free(filename); // file can be null ptr. but fine
+        UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+}
+
+void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx){
+    uint64_t rdi, rsi, rdx, r10;
+    uint64_t ret;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R10, &r10));
+    char * filename = get_filename(uc, rsi);
+    struct stat * st = (struct stat * )malloc(sizeof(struct stat));
+    if (filename == NULL)
+        goto fail;
+    if (rdi != 0xffffff9c && rdi < FD_LIMIT){
+        if ((ctx -> fd[rdi]) >> 16)
+            ret = fstatat(ctx -> fd[rdi] & 0xffff, filename, st, r10);
+        else
+            goto fail;
+    }
+    else
+        ret = fstatat(0xffffff9c, filename, st, r10);
+    if (ret != 0)
+        goto fail;
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ret));
+    UC_ERR_CHECK(uc_mem_write(uc, rdx, st, sizeof(struct stat)));
+    success("emul: sys_newfstatat(0x%lx, \"%s\", 0x%lx, 0x%lx)", rdi, filename, rdx, r10);
+    free(filename);
+    free(st);
+    return ;
+    fail:
+        failure("emul: sys_newfstatat(0x%lx, \"%s\", 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, filename, rdx, r10);
+        free(filename); // file can be null ptr. but fine
+        free(st);
+        UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }

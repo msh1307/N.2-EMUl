@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <capstone/capstone.h> 
 #include <sys/utsname.h>
+#include <sys/stat.h>
 
 static uc_err _uc_err_check(uc_err err, const char* expr)
 {
