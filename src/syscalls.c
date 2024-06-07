@@ -9,6 +9,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0x1:
             emu_sys_write(uc, ctx);
             break;
+        
+        case 0x3:
+            emu_sys_close(uc, ctx);
+            break;
 
         case 0x9:
             emu_sys_mmap(uc, ctx);
@@ -34,7 +38,7 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0x3f:
             emu_sys_uname(uc);
             break;
-
+        
         case 0x9e:
             emu_sys_arch_prctl(uc);
             break;
@@ -272,7 +276,9 @@ void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
         if ((ctx -> fd[rdi]) >> 16){
             char * buf = malloc(rdx);
             if (buf != NULL){
-                uint64_t ret = read(ctx -> fd[rdi], buf, rdx);
+                uint64_t ret = read(ctx -> fd[rdi]&0xffff, buf, rdx);
+                if (ret == 0xffffffffffffffffULL)
+                    goto fail;
                 UC_ERR_CHECK(uc_mem_write(uc, rsi, buf, rdx));
                 UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
                 success("emul: sys_read(0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx);
@@ -280,8 +286,9 @@ void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
             }
         }
     }
-    failure("emul: sys_read(0x%lx, 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx);
-    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+    fail:
+        failure("emul: sys_read(0x%lx, 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx);
+        UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
 void emu_sys_access(uc_engine * uc){
@@ -426,4 +433,23 @@ void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_add
         }
     }
     uc_free(regions);
+}
+
+void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
+    uint64_t rdi;
+    uint64_t ret;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    if (rdi < FD_LIMIT){
+        if ((ctx -> fd[rdi]) >> 16){
+            ret = (int64_t)close(ctx -> fd[rdi] & 0xffff);
+            if (ret == 0xffffffffffffffffULL)
+                goto fail;
+            success("emul: sys_close(0x%lx)", rdi);
+            UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
+            return ;
+        }
+    }
+    fail:
+        failure("emul: sys_close(0x%lx)", rdi);
+        UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
