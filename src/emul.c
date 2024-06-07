@@ -1,6 +1,7 @@
 #include "../include/emul.h"
 
-int interp_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx){
+int interp_load(uc_engine * uc, int fd, struct emul_ctx * ctx){
+    uint64_t address = ctx -> mmap_address;
     ctx -> init.interpreter.base = address;
     return emul_load(uc, fd, address, &ctx -> init.interpreter);
 }
@@ -14,7 +15,7 @@ int bin_load(uc_engine * uc, int fd, uint64_t address, struct emul_ctx * ctx){
 int emul_load(uc_engine * uc, int fd, uint64_t address, struct bin_meta * bin){
     size_t size = get_size(fd);
     uint16_t phnum, shnum;
-    uint64_t entry;
+    uint64_t entry, max;
     Elf64_Phdr * phdrs = NULL;
     Elf64_Shdr * shdrs = NULL;
     Elf64_Shdr * shstrs = NULL;
@@ -36,23 +37,14 @@ int emul_load(uc_engine * uc, int fd, uint64_t address, struct bin_meta * bin){
     bin -> entry = address + entry;
     bin -> phnum = phnum;
     success("Entrypoint: 0x%lx", bin -> entry);
-    uc_err err = emul_map_memory(uc, address, phdrs, phnum);
-    if (err != UC_ERR_OK){
-        failure("emul_load() -> emul_map_memory()");
-        return -1;
-    }
-    err = emul_load_file(uc, address, data, phdrs, phnum);
-    if (err != UC_ERR_OK){
-        failure("emul_load() -> emul_load_file()");
-        return -1;
-    }
-
+    emul_map_memory(uc, address, phdrs, phnum); 
+    emul_load_file(uc, address, data, phdrs, phnum);
     if (munmap(data, size) == -1)
         return -1;
     return 0;
 }
 
-uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs, uint16_t phnum){
+void emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs, uint16_t phnum){
     uint64_t vaddr, align, memsz, offset,flags,filesz, sz, addr;
     for (int i=0; i<phnum; i++){
         if (phdrs[i].p_type == PT_LOAD){
@@ -64,7 +56,7 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
             flags = phdrs[i].p_flags;
             addr = (base_address+vaddr)&0xfffffffffffff000;
             sz = (((base_address+vaddr+memsz - addr-1) / align) + 1) * align;
-            success("Mapping Memory [0x%lx ~ 0x%lx (0x%lx)] FileOffset=0x%lx FLAGS=0x%lx", addr,addr+sz,sz,offset,flags);
+            success("Mapping Memory [0x%lx ~ 0x%lx (0x%lx)] FileOffset=0x%lx FLAGS=0x%lx", addr, addr+sz, sz, offset, flags);
             uint32_t uc_flags = 0;
             if (flags & 4)
                 uc_flags |= UC_PROT_READ;
@@ -72,30 +64,24 @@ uc_err emul_map_memory(uc_engine * uc, uint64_t base_address ,Elf64_Phdr * phdrs
                 uc_flags |= UC_PROT_WRITE;
             if (flags & 1)
                 uc_flags |= UC_PROT_EXEC;
-            uc_err err = uc_mem_map(uc, addr, sz, uc_flags);
-            if (err)
-                return err;        
+            UC_ERR_CHECK(uc_mem_map(uc, addr, sz, uc_flags));
         }
     }
-    return UC_ERR_OK;
 }
 
-uc_err emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf64_Phdr * phdrs, uint16_t phnum){
+void emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf64_Phdr * phdrs, uint16_t phnum){
     for (int i=0; i<phnum; i++){
         switch (phdrs[i].p_type){
             case PT_LOAD:
                 uint64_t address = base_address+phdrs[i].p_vaddr;
                 uint64_t sz = phdrs[i].p_filesz;
-                uc_err err = uc_mem_write(uc, address, data+phdrs[i].p_offset, sz);
+                UC_ERR_CHECK(uc_mem_write(uc, address, data+phdrs[i].p_offset, sz));
                 success("Writing Memory [0x%lx ~ 0x%lx (0x%lx)]", address,address+sz,sz);
-                if (err)
-                    return err;
                 break;
             default:
                 break;
         }
     }
-    return UC_ERR_OK;
 }
 
 int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
@@ -163,6 +149,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
     (*ctx) -> argv = new_argv;
     (*ctx) -> argc = c-1;
     (*ctx) -> platform = "x86_64";
+    (*ctx) -> mmap_address = MMAP_ADDRESS;
     return 0;
 }
 
@@ -298,7 +285,6 @@ bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t
     putchar(0xa);
     failure("Program crashed");
     dump_memory_map(uc);
-    putchar(0xa);
     dump_registers(uc);
     switch(type) {
         case UC_MEM_READ_UNMAPPED:
@@ -355,12 +341,12 @@ void dump_memory_map(uc_engine * uc){
     for (uint32_t i = 0; i < region_count; i++) {
         uc_mem_region *region = &regions[i];
         printf("  Address: 0x%lx-0x%lx, Size: 0x%05lx, Permissions: ",
-               region->begin, region->end - 1, region->end - region->begin);
-        if (region->perms & UC_PROT_READ)
+               region -> begin, region -> end, region -> end - region -> begin);
+        if (region -> perms & UC_PROT_READ)
             printf("READ ");
-        if (region->perms & UC_PROT_WRITE)
+        if (region -> perms & UC_PROT_WRITE)
             printf("WRITE ");
-        if (region->perms & UC_PROT_EXEC)
+        if (region -> perms & UC_PROT_EXEC)
             printf("EXEC");
         printf("\n");
     }

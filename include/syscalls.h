@@ -14,4 +14,7 @@ void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx);
 void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx);
 void emu_sys_access(uc_engine * uc);
 void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx);
+void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx);
+int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_address);
+void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_address);
 #endif

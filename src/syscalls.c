@@ -9,6 +9,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0x1:
             emu_sys_write(uc, ctx);
             break;
+
+        case 0x9:
+            emu_sys_mmap(uc, ctx);
+            break;
         
         case 0xc:
             emu_sys_brk(uc, ctx);
@@ -332,4 +336,94 @@ void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx){
         free(filename); // file can be null ptr. but fine
         free(st);
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+}
+
+void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
+    uint64_t rdi, rsi, rdx, r10, r8 ,r9;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R10, &r10));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R8, &r8));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R9, &r9));
+    uint64_t address, size;
+    if (rsi == 0x0)
+        goto fail;
+    size = (((rsi - 1) / 0x1000ULL) + 1ULL) * 0x1000ULL;
+    if (rdi == 0x0){ // handling address == NULL
+        ctx -> mmap_address -= size;
+        address = ctx -> mmap_address;
+    }
+    else // handling address == user defined
+        address = rdi;
+    uint64_t ret;
+    uint32_t uc_flags = 0;
+    if (rdx & 1)
+        uc_flags |= UC_PROT_READ;
+    if (rdx & 2)
+        uc_flags |= UC_PROT_WRITE;
+    if (rdx & 4)
+        uc_flags |= UC_PROT_EXEC;
+    if (r10 & MAP_SHARED | r10 & MAP_PRIVATE){ // file modification propagated / file modification not propagated 
+        if (r8 < FD_LIMIT){
+            if ((ctx -> fd[r8]) >> 16){
+                ret = (uint64_t)mmap(NULL, size, rdx, r10, (ctx -> fd[r8])&0xffff, r9);
+                if (ret == (uint64_t)MAP_FAILED)
+                    goto fail;
+                if (r10 & MAP_FIXED)
+                    emu_do_unmap_range(uc, address, address + size); // to handle multiple mappings in a range
+                UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret));
+                ret = address;
+            }
+            else
+                goto fail;
+        }
+        else
+            goto fail;
+    }
+    else if (r10 & MAP_FIXED){
+        emu_do_unmap_range(uc, address, address + size); // to handle multiple mappings in a range
+        UC_ERR_CHECK(uc_mem_map(uc, address, size, uc_flags));
+    }
+    else{ // ANON, POP ... 
+        while (1){
+            if (!emu_is_mapped_range(uc, address, address + size))
+                UC_ERR_CHECK(uc_mem_map(uc, address, size, uc_flags));
+            address -= 0x1000ULL;
+        }
+    }
+    success("emul: sys_mmap(0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx, r10, r8, r9);
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ret));
+    return ; 
+    fail:
+        failure("emul: sys_mmap(0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, rsi, rdx, r10, r8, r9);
+        UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+}
+
+int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
+    uc_mem_region *regions;
+    uint32_t region_count;
+    uc_mem_regions(uc, &regions, &region_count);
+    for (uint32_t i = 0; i < region_count; i++) {
+        uc_mem_region *region = &regions[i];
+        if ((region -> begin <= start_address && region -> end >= start_address) || (region -> begin <= end_address && region -> end >= end_address))
+            return 1;
+    }
+    uc_free(regions);
+    return 0;
+}
+
+void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
+    uc_mem_region *regions;
+    uint64_t size;
+    uint32_t region_count;
+    uc_mem_regions(uc, &regions, &region_count);
+    for (uint32_t i = 0; i < region_count; i++) {
+        uc_mem_region *region = &regions[i];
+        if ((region -> begin <= start_address && region -> end >= start_address) || (region -> begin <= end_address && region -> end >= end_address)){
+            size = region -> end - region -> begin + 1;
+            UC_ERR_CHECK(uc_mem_unmap(uc, region -> begin, size));
+        }
+    }
+    uc_free(regions);
 }

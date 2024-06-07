@@ -10,7 +10,7 @@ int main(int argc, char ** argv){
 
     int fd = open(argv[1], O_RDONLY);
     char * loader_path = get_interpreter(fd, &bin);
-    if (!loader_path){
+    if (!loader_path){ // FIXME: handle static built binary
         failure("Failed to extract the interpreter path");
         return -1;
     }
@@ -23,7 +23,6 @@ int main(int argc, char ** argv){
         return -1;
     }
     uint64_t bin_base = BIN_BASE;
-    uint64_t ld_base = LD_BASE;
     if (emul_setup_emul_ctx(&ctx, argc, argv) < 0){
         failure("Failed to setup emul ctx");
         return -1;
@@ -31,7 +30,7 @@ int main(int argc, char ** argv){
     uc_engine *uc;
     UC_ERR_CHECK(uc_open(UC_ARCH_X86, UC_MODE_64, &uc));
     
-    int err = interp_load(uc, interpreter_fd, ld_base, ctx);
+    int err = interp_load(uc, interpreter_fd, ctx);
     if (err < 0){
         failure("Failed to load interpreter");
         return -1;
