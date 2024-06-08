@@ -324,10 +324,10 @@ bool emul_fault_hook(uc_engine *uc, uc_mem_type type, uint64_t address, uint32_t
         cs_insn *insn;
         size_t count = 0;
         count = cs_disasm(handle, (uint8_t *) &debug, sizeof(debug)-1, rip, 0, &insn);
-        if (count > 0) {
-            failure("0x%lx:\t%s\t\t%s", insn[1].address, insn[1].mnemonic, insn[1].op_str);
-            cs_free(insn, count);
+        for (int i = 0; i < 8; i++){
+            failure("0x%lx:\t%s\t\t%s", insn[i].address, insn[i].mnemonic, insn[i].op_str);
         }
+        cs_free(insn, count);
         cs_close(&handle);
     }
     return false;
@@ -416,6 +416,6 @@ void emul_run(uc_engine * uc, struct emul_ctx * ctx){
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
     // UC_ERR_CHECK(uc_hook_add(uc, &block, UC_HOOK_BLOCK, (void *)emul_block_hook, NULL, 1, 0));
     // UC_ERR_CHECK(uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0));
-    UC_ERR_CHECK(uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0)); 
+    uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0); 
     return ;
 }

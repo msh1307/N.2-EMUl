@@ -371,16 +371,20 @@ void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
         uc_flags |= UC_PROT_WRITE;
     if (rdx & 4)
         uc_flags |= UC_PROT_EXEC;
-    if (r10 & MAP_SHARED | r10 & MAP_PRIVATE){ // file modification propagated / file modification not propagated 
-        if (r8 < FD_LIMIT){
+    
+    if (r10 & MAP_SHARED){ // file modification propagated
+        if (r8 < FD_LIMIT){ // SHARED | ANON must be handled here
             if ((ctx -> fd[r8]) >> 16){
-                ret = (uint64_t)mmap(NULL, size, rdx, r10, (ctx -> fd[r8])&0xffff, r9);
+                ret = (uint64_t)mmap(NULL, size, rdx, (r10 & (~MAP_FIXED)), (ctx -> fd[r8])&0xffff, r9);
                 if (ret == (uint64_t)MAP_FAILED)
                     goto fail;
                 if (r10 & MAP_FIXED)
-                    emu_do_unmap_range(uc, address, address + size); // to handle multiple mappings in a range
+                    emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
+                else{
+                    while (!emu_is_mapped_range(uc, address, address + size))
+                        address -= 0x1000ULL;
+                }
                 UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret));
-                ret = address;
             }
             else
                 goto fail;
@@ -388,18 +392,47 @@ void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
         else
             goto fail;
     }
-    else if (r10 & MAP_FIXED){
-        emu_do_unmap_range(uc, address, address + size); // to handle multiple mappings in a range
+    else if (r10 & MAP_ANONYMOUS){ 
+        if (r10 & MAP_FIXED)
+            emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
+        while (!emu_is_mapped_range(uc, address, address + size))
+            address -= 0x1000ULL;
         UC_ERR_CHECK(uc_mem_map(uc, address, size, uc_flags));
     }
-    else{ // ANON, POP ... 
-        while (1){
-            if (!emu_is_mapped_range(uc, address, address + size))
+    else if (r10 & MAP_PRIVATE){
+        // fd & copy required
+        // need to handle MAP_PRIVATE - no sync
+        if (r9 & 0xfff != 0) // offset must be 0x1000 aligned
+            goto fail;
+        if (r8 < FD_LIMIT){ 
+            if ((ctx -> fd[r8]) >> 16){
+                uint64_t cur = lseek((ctx -> fd[r8]) & 0xffff, 0, SEEK_CUR);
+                uint64_t file_size = lseek((ctx -> fd[r8]) & 0xffff, 0, SEEK_END);
+                if (r9 >= file_size) // offset >= filesize
+                    goto fail;
+                lseek((ctx -> fd[r8]) & 0xffff, r9, SEEK_SET);
+                char * content = malloc(size); // file must be mapped with normalized size
+                memset(content, 0, size);
+                uint64_t read_size = read((ctx -> fd[r8]) & 0xffff, content, size);
+                read_size = (((read_size - 1) / 0x1000ULL) + 1ULL) * 0x1000ULL; 
+                if (r10 & MAP_FIXED)
+                    emu_do_unmap_range(uc, address, address + size - 1); 
                 UC_ERR_CHECK(uc_mem_map(uc, address, size, uc_flags));
-            address -= 0x1000ULL;
+                if (size > read_size)
+                    UC_ERR_CHECK(uc_mem_protect(uc, address + read_size, size - read_size, PROT_NONE)); // emulating SIGBUS fault here
+                UC_ERR_CHECK(uc_mem_write(uc, address, content, size));
+                free(content);
+                lseek((ctx -> fd[r8]) & 0xffff, cur, SEEK_SET);
+            }
+            else goto fail;
         }
+        else
+            goto fail;
     }
-    success("emul: sys_mmap(0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx, r10, r8, r9);
+    else 
+        goto fail;
+    ret = address; 
+    success("emul: sys_mmap(0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx, 0x%lx) == 0x%lx", rdi, rsi, rdx, r10, r8, r9, ret);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ret));
     return ; 
     fail:
@@ -413,7 +446,7 @@ int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_add
     uc_mem_regions(uc, &regions, &region_count);
     for (uint32_t i = 0; i < region_count; i++) {
         uc_mem_region *region = &regions[i];
-        if ((region -> begin <= start_address && region -> end >= start_address) || (region -> begin <= end_address && region -> end >= end_address))
+        if (end_address >= region -> begin && region -> end >= start_address) // rend < st or end < rst -> not 
             return 1;
     }
     uc_free(regions);
@@ -422,18 +455,25 @@ int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_add
 
 void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
     uc_mem_region *regions;
-    uint64_t size;
+    uint64_t end, st;
     uint32_t region_count;
     uc_mem_regions(uc, &regions, &region_count);
     for (uint32_t i = 0; i < region_count; i++) {
         uc_mem_region *region = &regions[i];
-        if ((region -> begin <= start_address && region -> end >= start_address) || (region -> begin <= end_address && region -> end >= end_address)){
-            size = region -> end - region -> begin + 1;
-            UC_ERR_CHECK(uc_mem_unmap(uc, region -> begin, size));
+        // rst < rend
+        // st < end
+        // 4! / 2!*2! cases
+        if (end_address >= region -> begin && region -> end >= start_address){
+            // end >= rst && rend >= st
+            // get intersection
+            st = (start_address > region -> begin) ? start_address : region -> begin;
+            end = (end_address < region -> end) ? end_address : region -> end;
+            UC_ERR_CHECK(uc_mem_unmap(uc, st, end - st + 1));
         }
     }
     uc_free(regions);
 }
+
 
 void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi;
@@ -442,7 +482,7 @@ void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
     if (rdi < FD_LIMIT){
         if ((ctx -> fd[rdi]) >> 16){
             ret = (int64_t)close(ctx -> fd[rdi] & 0xffff);
-            if (ret == 0xffffffffffffffffULL)
+            if (ret != 0)
                 goto fail;
             success("emul: sys_close(0x%lx)", rdi);
             UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
