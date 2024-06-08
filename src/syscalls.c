@@ -29,17 +29,17 @@ static void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implement
         uint64_t address = ctx -> init.user_bin.base;
         uc_mem_region *regions;
         int cnt;
-        if (UC_ERR_CHECK(uc_mem_regions(uc, &regions, &cnt)) != UC_ERR_OK)
-            return ;
+        UC_ERR_CHECK(uc_mem_regions(uc, &regions, &cnt));
         int flag = -1;
         for (int i = 0; i < cnt ; i++){
             if (regions[i].begin == address && flag == -1){
                 flag = 1;
                 address = regions[i].end + 1;
             }
-            else if (flag){
+            else if (flag == 1){
                 flag = regions[i].begin == address;
-                address = regions[i].end + 1;
+                if (flag)
+                    address = regions[i].end + 1;
             }
         }
         if (flag != -1)
@@ -48,18 +48,18 @@ static void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implement
             ctx -> program_break = -2;
     }
     else if (ctx -> program_break == -2){
-        failure("emul: brk(0x%lx) == 0xffffffffffffffff", rdi);
+        failure("emul: brk(0x%lx) syscall implementation error", rdi);
         return ;
     }
     success("emul: brk(0x%lx)", rdi);
     if (rdi == 0)
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ctx -> program_break));
     else{
-        uint64_t exp = rdi - ctx -> program_break;
-        if (exp > MAPPING_LIMIT)
+        uint64_t size = rdi - ctx -> program_break;
+        if (size > MAPPING_LIMIT)
             UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
         else{
-            if (UC_ERR_CHECK(uc_mem_map(uc, ctx -> program_break, exp, UC_PROT_READ | UC_PROT_WRITE)) != UC_ERR_OK){
+            if (UC_ERR_CHECK(uc_mem_map(uc, ctx -> program_break, size, UC_PROT_READ | UC_PROT_WRITE)) != UC_ERR_OK){
                 UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
                 return ;
             }
@@ -485,7 +485,7 @@ static void emu_sys_set_robust_list(uc_engine * uc){
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
     success("emul: sys_set_robust_list(0x%lx, 0x%lx)", rdi, rsi);
-    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_AX, &(uint64_t){0x0ULL})); // just return 0
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_AX, &(uint64_t){0x0ULL}));
 }
 
 static void emu_sys_rseq(uc_engine * uc){
@@ -494,7 +494,17 @@ static void emu_sys_rseq(uc_engine * uc){
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
     success("emul: sys_rseq(0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx);
-    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0x0ULL})); // just return 0
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0x0ULL})); 
+}
+
+static void emu_sys_prlimit64(uc_engine * uc){
+    uint64_t rdi, rsi, rdx, r10;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R10, &r10));
+    success("emul: sys_prlimit64(0x%lx, 0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx, r10);
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0x0ULL})); 
 }
 
 void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
@@ -569,12 +579,17 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
             emu_sys_newfstatat(uc, ctx);
             break;
 
+        case 0x12e:
+            emu_sys_prlimit64(uc);
+            break;
+
         default:
             uint64_t rdi, rsi, rdx;
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
             UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
             success("emul: UNIMPLEMENTED SYSCALL - syscall(rax=0x%lx, rdi=0x%lx, rsi=0x%lx, rdx=0x%lx)", rax, rdi, rsi, rdx);
+            UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0x0ULL})); // do nothing and return 0
             break;
     }
 }

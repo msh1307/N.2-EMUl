@@ -3,6 +3,8 @@ SRCS=./src/main.c ./src/util.c ./src/elf.c ./src/emul.c ./src/syscalls.c ./src/u
 OBJS=$(SRCS:.c=.o)
 TARGET=app.out
 FLAGS=-lunicorn -lpthread -lm -lelf -lcapstone
+TEST_SRCS = tests/test.c
+TEST_OBJS = $(TEST_SRCS:.c=.o)
 
 $(TARGET): $(OBJS)
 	$(CC) -o $@ $(OBJS) $(FLAGS)
@@ -12,6 +14,12 @@ $(TARGET): $(OBJS)
 
 all: $(TARGET)
 
+test: $(TARGET) $(TEST_OBJS)
+	$(CC) $(CFLAGS) $(TEST_OBJS) -o test.out
+	./$(TARGET) ./test.out
+
 clean:
 	rm -f ./src/*.o
 	rm -f $(TARGET)
+	rm -f ./tests/*.o
+	rm -f ./*.out
