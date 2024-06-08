@@ -4,6 +4,12 @@
 #include "util.h"
 #include "elf.h"
 #include "main.h"
+#include "user_defined_hooks.h"
+
+#define HWCAP_X86_64_BASELINE (1 << 0)
+#define HWCAP_X86_64_V2 (1 << 1)
+#define HWCAP_X86_64_V3 (1 << 2)
+#define HWCAP_X86_64_V4 (1 << 3)
 
 struct bin_meta {
     uint64_t entry;  
@@ -29,6 +35,7 @@ struct emul_ctx {
     int * fd;
     int fd_cur;
     uint64_t mmap_address;
+    uint64_t pid;
 };
 
 #include "syscalls.h"

@@ -1,6 +1,8 @@
 #include "../include/main.h"
 
 int main(int argc, char ** argv){
+    clock_t start, end;
+    double cpu_time_used;
     struct emul_ctx * ctx; 
     void * bin = NULL; 
     if (argc < 2){
@@ -45,7 +47,11 @@ int main(int argc, char ** argv){
     close(fd);
 
     emul_setup_stack(uc, ctx);
+    start = clock(); 
     emul_run(uc, ctx);
+    end = clock();
+    cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
+    printf("%fsec\n", cpu_time_used);
     uc_close(uc);
     free(ctx -> envp); // ctx -> envp can be NULL ptr. but it doesn't matter.
     free(ctx -> argv);

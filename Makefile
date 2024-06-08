@@ -1,5 +1,5 @@
 CC=gcc
-SRCS=./src/main.c ./src/util.c ./src/elf.c ./src/emul.c ./src/syscalls.c
+SRCS=./src/main.c ./src/util.c ./src/elf.c ./src/emul.c ./src/syscalls.c ./src/user_defined_hooks.c
 OBJS=$(SRCS:.c=.o)
 TARGET=app.out
 FLAGS=-lunicorn -lpthread -lm -lelf -lcapstone

@@ -1,76 +1,6 @@
 #include "../include/syscalls.h"
 
-void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
-    switch (rax){
-        case 0x0:
-            emu_sys_read(uc, ctx);
-            break;
-
-        case 0x1:
-            emu_sys_write(uc, ctx);
-            break;
-        
-        case 0x3:
-            emu_sys_close(uc, ctx);
-            break;
-
-        case 0x9:
-            emu_sys_mmap(uc, ctx);
-            break;
-        
-        case 0xa:
-            emu_sys_mprotect(uc);
-            break;
-
-        case 0xc:
-            emu_sys_brk(uc, ctx);
-            break;
-        
-        case 0x11:
-            emu_sys_pread64(uc, ctx);
-            break;
-
-        case 0x14:
-            emu_sys_writev(uc, ctx);
-            break;
-        
-        case 0x15:
-            emu_sys_access(uc);
-            break;
-
-        case 0xe7: 
-        case 0x3c:
-            success("emul: exit()");
-            UC_ERR_CHECK(uc_emu_stop(uc));
-            break;
-
-        case 0x3f:
-            emu_sys_uname(uc);
-            break;
-        
-        case 0x9e:
-            emu_sys_arch_prctl(uc);
-            break;
-        
-        case 0x101:
-            emu_sys_openat(uc, ctx);
-            break;
-        
-        case 0x106:
-            emu_sys_newfstatat(uc, ctx);
-            break;
-
-        default:
-            uint64_t rdi, rsi, rdx;
-            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
-            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
-            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
-            success("emul: UNIMPLEMENTED SYSCALL - syscall(rax=0x%lx, rdi=0x%lx, rsi=0x%lx, rdx=0x%lx)", rax, rdi, rsi, rdx);
-            break;
-    }
-}
-
-void emu_sys_write(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_write(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -92,7 +22,7 @@ void emu_sys_write(uc_engine * uc, struct emul_ctx * ctx){
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation with a fixed program break 
+static void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation with a fixed program break 
     uint64_t rdi;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     if (ctx -> program_break == -1){ 
@@ -139,7 +69,7 @@ void emu_sys_brk(uc_engine * uc, struct emul_ctx * ctx){ // brk implementation w
     }
 }
 
-void emu_sys_arch_prctl(uc_engine * uc){
+static void emu_sys_arch_prctl(uc_engine * uc){
     uint64_t rdi, rsi, tmp;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -173,7 +103,7 @@ void emu_sys_arch_prctl(uc_engine * uc){
     }
 }
 
-void emu_sys_writev(uc_engine *uc, struct emul_ctx * ctx){
+static void emu_sys_writev(uc_engine *uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -205,7 +135,7 @@ void emu_sys_writev(uc_engine *uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_uname(uc_engine * uc){ // when vdso not supported (emulated) uname syscall used to get kernel info
+static void emu_sys_uname(uc_engine * uc){ // when vdso not supported (emulated) uname syscall used to get kernel info
     struct utsname uname;
     uint64_t rdi;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
@@ -219,7 +149,7 @@ void emu_sys_uname(uc_engine * uc){ // when vdso not supported (emulated) uname 
     success("emul: sys_uname(0x%lx)",rdi);
 }
 
-char * get_filename(uc_engine * uc, uint64_t address){
+static char * get_filename(uc_engine * uc, uint64_t address){
     uint32_t i, len;
     i = 0x30;
     char * filename = malloc(i);
@@ -236,7 +166,7 @@ char * get_filename(uc_engine * uc, uint64_t address){
     return NULL;
 }
 
-void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx, r10;
     uint32_t fd;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
@@ -276,7 +206,7 @@ void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -300,7 +230,7 @@ void emu_sys_read(uc_engine * uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_access(uc_engine * uc){
+static void emu_sys_access(uc_engine * uc){
     uint64_t rdi, rsi;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -320,7 +250,7 @@ void emu_sys_access(uc_engine * uc){
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx, r10;
     uint64_t ret;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
@@ -354,7 +284,41 @@ void emu_sys_newfstatat(uc_engine * uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
+static int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
+    uc_mem_region *regions;
+    uint32_t region_count;
+    uc_mem_regions(uc, &regions, &region_count);
+    for (uint32_t i = 0; i < region_count; i++) {
+        uc_mem_region *region = &regions[i];
+        if (end_address >= region -> begin && region -> end >= start_address) // rend < st or end < rst -> not 
+            return 1;
+    }
+    uc_free(regions);
+    return 0;
+}
+
+static void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
+    uc_mem_region *regions;
+    uint64_t end, st;
+    uint32_t region_count;
+    uc_mem_regions(uc, &regions, &region_count);
+    for (uint32_t i = 0; i < region_count; i++) {
+        uc_mem_region *region = &regions[i];
+        // rst < rend
+        // st < end
+        // 4! / 2!*2! cases
+        if (end_address >= region -> begin && region -> end >= start_address){
+            // end >= rst && rend >= st
+            // get intersection
+            st = (start_address > region -> begin) ? start_address : region -> begin;
+            end = (end_address < region -> end) ? end_address : region -> end;
+            UC_ERR_CHECK(uc_mem_unmap(uc, st, end - st + 1));
+        }
+    }
+    uc_free(regions);
+}
+
+static void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx, r10, r8 ,r9;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -449,41 +413,7 @@ void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 
-int emu_is_mapped_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
-    uc_mem_region *regions;
-    uint32_t region_count;
-    uc_mem_regions(uc, &regions, &region_count);
-    for (uint32_t i = 0; i < region_count; i++) {
-        uc_mem_region *region = &regions[i];
-        if (end_address >= region -> begin && region -> end >= start_address) // rend < st or end < rst -> not 
-            return 1;
-    }
-    uc_free(regions);
-    return 0;
-}
-
-void emu_do_unmap_range(uc_engine * uc, uint64_t start_address, uint64_t end_address){
-    uc_mem_region *regions;
-    uint64_t end, st;
-    uint32_t region_count;
-    uc_mem_regions(uc, &regions, &region_count);
-    for (uint32_t i = 0; i < region_count; i++) {
-        uc_mem_region *region = &regions[i];
-        // rst < rend
-        // st < end
-        // 4! / 2!*2! cases
-        if (end_address >= region -> begin && region -> end >= start_address){
-            // end >= rst && rend >= st
-            // get intersection
-            st = (start_address > region -> begin) ? start_address : region -> begin;
-            end = (end_address < region -> end) ? end_address : region -> end;
-            UC_ERR_CHECK(uc_mem_unmap(uc, st, end - st + 1));
-        }
-    }
-    uc_free(regions);
-}
-
-void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi;
     uint64_t ret;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
@@ -502,7 +432,7 @@ void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
         UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
 }
 
-void emu_sys_mprotect(uc_engine * uc){
+static void emu_sys_mprotect(uc_engine * uc){
     uint64_t rdi, rsi, rdx;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
@@ -517,7 +447,7 @@ void emu_sys_mprotect(uc_engine * uc){
     UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0x0ULL}));
 }
 
-void emu_sys_pread64(uc_engine * uc, struct emul_ctx * ctx){
+static void emu_sys_pread64(uc_engine * uc, struct emul_ctx * ctx){
     uint64_t rdi, rsi, rdx, r10, ret;
     char * buf;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
@@ -541,4 +471,110 @@ void emu_sys_pread64(uc_engine * uc, struct emul_ctx * ctx){
     fail:
         failure("emul: sys_pread64(0x%lx, 0x%lx, 0x%lx, 0x%lx) == 0x%lx", rdi, rsi, rdx, r10, ret);
         UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
+}
+
+static void emu_sys_set_tid_address(uc_engine * uc, struct emul_ctx * ctx){ // supporting only single thread program
+    uint64_t rdi;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &ctx -> pid)); // main thread
+    success("emul: sys_set_tid_address(0x%lx)", rdi);
+}
+
+static void emu_sys_set_robust_list(uc_engine * uc){
+    uint64_t rdi, rsi;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    success("emul: sys_set_robust_list(0x%lx, 0x%lx)", rdi, rsi);
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_AX, &(uint64_t){0x0ULL})); // just return 0
+}
+
+static void emu_sys_rseq(uc_engine * uc){
+    uint64_t rdi, rsi, rdx;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+    success("emul: sys_rseq(0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx);
+    UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0x0ULL})); // just return 0
+}
+
+void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
+    switch (rax){
+        case 0x0:
+            emu_sys_read(uc, ctx);
+            break;
+
+        case 0x1:
+            emu_sys_write(uc, ctx);
+            break;
+        
+        case 0x3:
+            emu_sys_close(uc, ctx);
+            break;
+
+        case 0x9:
+            emu_sys_mmap(uc, ctx);
+            break;
+        
+        case 0xa:
+            emu_sys_mprotect(uc);
+            break;
+
+        case 0xc:
+            emu_sys_brk(uc, ctx);
+            break;
+        
+        case 0x11:
+            emu_sys_pread64(uc, ctx);
+            break;
+
+        case 0x14:
+            emu_sys_writev(uc, ctx);
+            break;
+        
+        case 0x15:
+            emu_sys_access(uc);
+            break;
+
+        case 0xe7: 
+        case 0x3c:
+            success("emul: exit()");
+            UC_ERR_CHECK(uc_emu_stop(uc));
+            break;
+
+        case 0x3f:
+            emu_sys_uname(uc);
+            break;
+        
+        case 0xda:
+            emu_sys_set_tid_address(uc, ctx);
+            break;
+        
+        case 0x111:
+            emu_sys_set_robust_list(uc);
+            break;
+        
+        case 0x14e:
+            emu_sys_rseq(uc);
+            break;
+
+        case 0x9e:
+            emu_sys_arch_prctl(uc);
+            break;
+        
+        case 0x101:
+            emu_sys_openat(uc, ctx);
+            break;
+        
+        case 0x106:
+            emu_sys_newfstatat(uc, ctx);
+            break;
+
+        default:
+            uint64_t rdi, rsi, rdx;
+            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+            UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+            success("emul: UNIMPLEMENTED SYSCALL - syscall(rax=0x%lx, rdi=0x%lx, rsi=0x%lx, rdx=0x%lx)", rax, rdi, rsi, rdx);
+            break;
+    }
 }

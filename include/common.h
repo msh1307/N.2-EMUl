@@ -18,6 +18,7 @@
 #include <capstone/capstone.h> 
 #include <sys/utsname.h>
 #include <sys/stat.h>
+#include <time.h>
 
 static uc_err _uc_err_check(uc_err err, const char* expr)
 {

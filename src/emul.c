@@ -150,6 +150,7 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
     (*ctx) -> argc = c-1;
     (*ctx) -> platform = "x86_64";
     (*ctx) -> mmap_address = MMAP_ADDRESS;
+    (*ctx) -> pid = 1000; 
     return 0;
 }
 
@@ -172,7 +173,10 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     push_str(uc, stack_top, ctx -> prog, len);
     stack_top -= len;
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_EXECFN, .a_un = { .a_val = stack_top }};
-    
+
+    uint64_t hwcap = 0x78bfbf5ULL;
+    hwcap |= HWCAP_X86_64_V4;
+
     push_str(uc, stack_top, RANDOM_SEED, 16);
     stack_top -= 16;
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_RANDOM, .a_un = { .a_val = stack_top }};
@@ -189,7 +193,7 @@ void emul_setup_stack(uc_engine * uc, struct emul_ctx * ctx){
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_PHDR, .a_un = { .a_val = ctx -> init.user_bin.phdr }}; 
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_CLKTCK, .a_un = { .a_val = 100ULL }};
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_PAGESZ, .a_un = { .a_val = 0x1000ULL }}; // default page size
-    auxv[c++] = (Elf64_auxv_t){.a_type = AT_HWCAP, .a_un = { .a_val = 0x078bfbfdULL }}; // x86_64
+    auxv[c++] = (Elf64_auxv_t){.a_type = AT_HWCAP, .a_un = { .a_val = hwcap }}; // x86_64
     auxv[c++] = (Elf64_auxv_t){.a_type = AT_MINSIGSTKSZ, .a_un = { .a_val = 0x6f0LL }}; 
     // no vdso AT_SYSINFO_EHDR
     uint64_t env_str = stack_top;
@@ -399,21 +403,22 @@ void dump_registers(uc_engine *uc) {
 }
 
 void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
-    uint64_t rax, rdi, rsi, rdx, r10, r8, r9;
+    uint64_t rax;
     UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RAX, &rax));
     handle_syscall(uc, rax, ctx);
 }
 
 void emul_block_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data){
-	success("Tracing basic block at 0x%lx, block size = 0x%x", address, size);
+	// success("Tracing basic block at 0x%lx, block size = 0x%x", address, size);
 } // code coverage
 
 void emul_run(uc_engine * uc, struct emul_ctx * ctx){
-    uc_hook step, fault, syscall, block;
+    uc_hook step, fault, syscall, block, cpuid;
     success("Running %s", ctx -> prog);
     UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RSP, &ctx -> init.rsp));
     UC_ERR_CHECK(uc_hook_add(uc, &fault, UC_HOOK_MEM_INVALID, (void *)emul_fault_hook, NULL, 1, 0)); // it covers fetch & read/write prot ...
     UC_ERR_CHECK(uc_hook_add(uc, &syscall, UC_HOOK_INSN, (void *)emul_syscall_hook, ctx, 1, 0, UC_X86_INS_SYSCALL));
+    register_user_defined_hooks(uc);
     // UC_ERR_CHECK(uc_hook_add(uc, &block, UC_HOOK_BLOCK, (void *)emul_block_hook, NULL, 1, 0));
     // UC_ERR_CHECK(uc_hook_add(uc, &step, UC_HOOK_CODE, (void *)emul_step_hook, NULL, 1, 0));
     uc_emu_start(uc, ctx -> init.interpreter.entry, -1, 0, 0); 
