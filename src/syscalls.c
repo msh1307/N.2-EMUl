@@ -25,6 +25,10 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0xc:
             emu_sys_brk(uc, ctx);
             break;
+        
+        case 0x11:
+            emu_sys_pread64(uc, ctx);
+            break;
 
         case 0x14:
             emu_sys_writev(uc, ctx);
@@ -33,7 +37,8 @@ void handle_syscall(uc_engine * uc, uint64_t rax, struct emul_ctx * ctx){
         case 0x15:
             emu_sys_access(uc);
             break;
-            
+
+        case 0xe7: 
         case 0x3c:
             success("emul: exit()");
             UC_ERR_CHECK(uc_emu_stop(uc));
@@ -494,7 +499,7 @@ void emu_sys_close(uc_engine * uc, struct emul_ctx * ctx){
     }
     fail:
         failure("emul: sys_close(0x%lx)", rdi);
-        UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
+        UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
 }
 
 void emu_sys_mprotect(uc_engine * uc){
@@ -510,4 +515,30 @@ void emu_sys_mprotect(uc_engine * uc){
     }
     success("emul: sys_mprotect(0x%lx, 0x%lx, 0x%lx)", rdi, rsi, rdx);
     UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &(uint64_t){0x0ULL}));
+}
+
+void emu_sys_pread64(uc_engine * uc, struct emul_ctx * ctx){
+    uint64_t rdi, rsi, rdx, r10, ret;
+    char * buf;
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDI, &rdi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RSI, &rsi));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_RDX, &rdx));
+    UC_ERR_CHECK(uc_reg_read(uc, UC_X86_REG_R10, &r10));
+    if (rdi < FD_LIMIT){
+        if ((ctx -> fd[rdi]) >> 16){
+            buf = malloc(rdx);
+            memset(buf, 0, rdx);
+            ret = pread((ctx -> fd[rdi])&0xffff, buf, rdx, r10);
+            if (ret == 0xffffffffffffffffULL)
+                goto fail;
+            success("emul: sys_pread64(0x%lx, 0x%lx, 0x%lx, 0x%lx) == 0x%lx", rdi, rsi, rdx, r10, ret);
+            UC_ERR_CHECK(uc_mem_write(uc, rsi, buf, rdx));
+            UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
+            free(buf);
+            return ;
+        }
+    }
+    fail:
+        failure("emul: sys_pread64(0x%lx, 0x%lx, 0x%lx, 0x%lx) == 0x%lx", rdi, rsi, rdx, r10, ret);
+        UC_ERR_CHECK(uc_reg_write(uc, X86_REG_RAX, &ret));
 }
