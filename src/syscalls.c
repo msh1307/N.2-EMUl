@@ -346,20 +346,20 @@ static void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
     
     if (r10 & MAP_SHARED){ // file modification propagated
         if (r8 < FD_LIMIT){ // SHARED | ANON must be handled here
-            if ((ctx -> fd[r8]) >> 16){
-                ret = (uint64_t)mmap(NULL, size, rdx, (r10 & (~MAP_FIXED)), (ctx -> fd[r8])&0xffff, r9);
-                if (ret == (uint64_t)MAP_FAILED)
-                    goto fail;
-                if (r10 & MAP_FIXED)
-                    emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
-                else{
-                    while (!emu_is_mapped_range(uc, address, address + size))
-                        address -= 0x1000ULL;
-                }
-                UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret));
-            }
+            if ((ctx -> fd[r8]) >> 16)
+                ret = (ctx -> fd[r8])&0xffff;
             else
+                ret = r8;
+            ret = (uint64_t)mmap(NULL, size, rdx, (r10 & (~MAP_FIXED)), ret, r9);
+            if (ret == (uint64_t)MAP_FAILED)
                 goto fail;
+            if (r10 & MAP_FIXED)
+                emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
+            else{
+                while (!emu_is_mapped_range(uc, address, address + size))
+                    address -= 0x1000ULL;
+            }
+            UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret));
         }
         else
             goto fail;
