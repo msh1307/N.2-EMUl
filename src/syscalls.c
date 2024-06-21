@@ -349,20 +349,23 @@ static void emu_sys_mmap(uc_engine * uc, struct emul_ctx * ctx){
             if ((ctx -> fd[r8]) >> 16)
                 ret = (ctx -> fd[r8])&0xffff;
             else
-                ret = r8;
-            ret = (uint64_t)mmap(NULL, size, rdx, (r10 & (~MAP_FIXED)), ret, r9);
-            if (ret == (uint64_t)MAP_FAILED)
                 goto fail;
-            if (r10 & MAP_FIXED)
-                emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
-            else{
-                while (!emu_is_mapped_range(uc, address, address + size))
-                    address -= 0x1000ULL;
-            }
-            UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret));
         }
+        else if(r8 == 0xffffffff)
+            ret = r8;
         else
             goto fail;
+        ret = (uint64_t)mmap(NULL, size, rdx, (r10 & (~MAP_FIXED)), ret, r9);
+        if (ret == (uint64_t)MAP_FAILED)
+            goto fail;
+        if (r10 & MAP_FIXED)
+            emu_do_unmap_range(uc, address, address + size - 1); // to handle multiple mappings in a range
+        else{
+            while (!emu_is_mapped_range(uc, address, address + size))
+                address -= 0x1000ULL;
+        }
+        UC_ERR_CHECK(uc_mem_map_ptr(uc, address, size, uc_flags, (void *)ret)); 
+
     }
     else if (r10 & MAP_ANONYMOUS){ 
         if (r10 & MAP_FIXED)
