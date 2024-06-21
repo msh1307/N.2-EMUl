@@ -186,7 +186,6 @@ static void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
         fd = openat(0xffffff9c, filename, rdx, r10);
 
     if (fd > 0xffff){
-        failure("File descriptor exceed 0xffff");
         goto fail;
     }
     if (ctx -> fd_cur + 1 > FD_LIMIT){
@@ -201,8 +200,8 @@ static void emu_sys_openat(uc_engine * uc, struct emul_ctx * ctx){
     free(filename);
     return ;
     fail:
-        free(filename); // file can be null ptr. but fine
         failure("emul: sys_openat(0x%lx, \"%s\", 0x%lx, 0x%lx) == 0xffffffffffffffff", rdi, filename, rdx, r10);
+        free(filename); // file can be null ptr. but fine
         UC_ERR_CHECK(uc_reg_write(uc, UC_X86_REG_RAX, &(uint64_t){0xffffffffffffffffULL}));
 }
 

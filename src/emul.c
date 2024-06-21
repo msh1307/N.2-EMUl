@@ -87,9 +87,9 @@ void emul_load_file(uc_engine * uc, uint64_t base_address, uint8_t * data ,Elf64
 int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
     int c = 0;
     *ctx = malloc(sizeof(struct emul_ctx));
-    (*ctx) -> prog = argv[1];
+    (*ctx) -> prog = argv[2];
     int sep = -1;
-    for (int i = 2; i < argc; i++) { 
+    for (int i = 3; i < argc; i++) { 
         if (strcmp(argv[i], "--") == 0) {
             sep = i;
             break;
@@ -118,20 +118,10 @@ int emul_setup_emul_ctx(struct emul_ctx ** ctx, int argc, char ** argv){
         failure("emul_setup_emul_ctx() -> malloc() failed");
         return -1;
     }
-    for (int i = 1; i < sep; i++) {
+    for (int i = 2; i < sep; i++) {
         new_argv[c++] = argv[i];
     }
     new_argv[c++] = NULL;
-    
-    char * cwd = malloc(0x100);
-    if ((*ctx) -> prog[0] != '/' && (*ctx) -> prog[0] != '~'){
-        if (getcwd(cwd, 0x100) == NULL) 
-            return -1;
-        cwd = realloc(cwd, strlen(cwd) + strlen((*ctx) -> prog) + 1);
-        strcat(cwd, "/");
-        strcat(cwd, (*ctx) -> prog);
-        (*ctx) -> prog = cwd;
-    }
 
     (*ctx) -> fd = (int *)malloc(sizeof(int) * FD_LIMIT);
     if ((*ctx) -> fd == NULL){
@@ -409,7 +399,7 @@ void emul_syscall_hook(uc_engine * uc, struct emul_ctx * ctx){
 }
 
 void emul_block_hook(uc_engine *uc, uint64_t address, uint32_t size, void *user_data){
-	// success("Tracing basic block at 0x%lx, block size = 0x%x", address, size);
+	success("Tracing basic block at 0x%lx, block size = 0x%x", address, size);
 } // code coverage
 
 void emul_run(uc_engine * uc, struct emul_ctx * ctx){

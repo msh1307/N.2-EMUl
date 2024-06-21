@@ -6,11 +6,23 @@ int main(int argc, char ** argv){
     struct emul_ctx * ctx; 
     void * bin = NULL; 
     if (argc < 2){
-        failure("Usage ./app.out filename [argv, argv1, ...] -- [env1, env2, ...]");
+        failure("Usage ./app.out virt_fs filename [argv, argv1, ...] -- [env1, env2, ...]");
         return -1;
     }
-
-    int fd = open(argv[1], O_RDONLY);
+    if (argv[2][0] != '/'){
+        failure("filename must start with '/'");
+        return -1;
+    }
+    if (chdir(argv[1]) != 0){
+        failure("Failed to change working directory");
+        return -1;
+    }
+    if (chroot(".") != 0){
+        failure("Failed to change root directory");
+        return -1;
+    }
+    success("chroot(\"%s\")", argv[1]);
+    int fd = open(argv[2], O_RDONLY);
     char * loader_path = get_interpreter(fd, &bin);
     if (!loader_path){ // FIXME: handle static built binary
         failure("Failed to extract the interpreter path");

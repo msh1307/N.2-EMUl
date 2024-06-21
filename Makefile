@@ -15,8 +15,8 @@ $(TARGET): $(OBJS)
 all: $(TARGET)
 
 test: $(TARGET) $(TEST_OBJS)
-	$(CC) $(CFLAGS) $(TEST_OBJS) -o test.out
-	./$(TARGET) ./test.out
+	$(CC) $(CFLAGS) $(TEST_OBJS) -o ./vfs/test.out
+	./$(TARGET) ./vfs /test.out
 
 clean:
 	rm -f ./src/*.o
