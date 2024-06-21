@@ -23,3 +23,4 @@ clean:
 	rm -f $(TARGET)
 	rm -f ./tests/*.o
 	rm -f ./*.out
+	rm -f ./vfs/test.out
